@@ -19,13 +19,28 @@
 
 ## MVP 原型
 
-当前已提供一个无后端依赖的静态可交互 MVP：
+当前已提供静态可交互 MVP，并开始进入 M1 真实数据基座。
 
 - 入口：[index.html](./index.html)
 - 样式：[styles.css](./styles.css)
 - 交互与模拟数据：[app.js](./app.js)
+- 本地服务：[server.js](./server.js)
 
 直接用浏览器打开 `index.html` 即可查看。
+
+如果需要启用本地 API 和 JSON 数据持久化：
+
+```bash
+npm start
+```
+
+然后访问：
+
+```text
+http://localhost:4173
+```
+
+本地运行时会自动创建 `data/db.json` 保存商品、素材、审核、发布、库存和日志数据。该文件只作为本地运行数据，不提交到仓库。
 
 ## 文档
 
@@ -35,3 +50,4 @@
 - [业务链路与状态机](./docs/03-workflows-and-state-machines.md)
 - [信息架构与关键页面](./docs/04-information-architecture.md)
 - [开发实施计划](./docs/05-implementation-plan.md)
+- [产品完整里程碑](./docs/06-milestones.md)

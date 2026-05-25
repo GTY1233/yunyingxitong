@@ -6,7 +6,9 @@ const state = {
   productFilter: "all",
 };
 
-const products = [
+const API_ENABLED = window.location.protocol !== "file:";
+
+let products = [
   {
     id: "P1001",
     name: "智能恒温杯",
@@ -97,14 +99,14 @@ const products = [
   },
 ];
 
-const workflows = [
+let workflows = [
   { productId: "P1001", product: "智能恒温杯", node: "等待素材审核", status: "待审核", progress: 68 },
   { productId: "P1004", product: "低糖燕麦能量棒", node: "正在生成视频", status: "生成中", progress: 54 },
   { productId: "P1002", product: "折叠补光灯", node: "库存低于预警值", status: "异常", progress: 42 },
   { productId: "P1003", product: "旅行压缩收纳包", node: "库存为 0，发布已暂停", status: "已暂停", progress: 76 },
 ];
 
-const assets = [
+let assets = [
   { id: "A001", productId: "P1001", name: "恒温杯主图 A", type: "主图", status: "待审核", usage: "上架草稿", version: "v3", kind: "image" },
   { id: "A002", productId: "P1001", name: "恒温杯种草视频", type: "短视频", status: "待审核", usage: "发布任务", version: "v2", kind: "video" },
   { id: "A003", productId: "P1002", name: "补光灯详情页图", type: "详情页图", status: "审核通过", usage: "素材库", version: "v1", kind: "image" },
@@ -112,32 +114,32 @@ const assets = [
   { id: "A005", productId: "P1004", name: "燕麦棒发布文案", type: "发布文案", status: "待审核", usage: "待发布", version: "v1", kind: "copy" },
 ];
 
-const reviews = [
+let reviews = [
   { id: "R001", productId: "P1001", target: "恒温杯主图 A", type: "图片", status: "待审核", reviewer: "运营审核", reason: "确认主图是否符合抖音上架规范" },
   { id: "R002", productId: "P1001", target: "恒温杯种草视频", type: "视频", status: "待审核", reviewer: "内容审核", reason: "确认视频脚本、封面和挂商品信息" },
   { id: "R003", productId: "P1004", target: "燕麦棒发布文案", type: "文案", status: "待审核", reviewer: "内容审核", reason: "检查低糖表达和平台敏感词" },
 ];
 
-const listingTasks = [
+let listingTasks = [
   { id: "L001", productId: "P1001", platform: "抖音", account: "抖店主账号", status: "草稿中", completeness: 86 },
   { id: "L002", productId: "P1004", platform: "小红书", account: "小红书店铺", status: "待审核", completeness: 74 },
   { id: "L003", productId: "P1003", platform: "淘宝", account: "淘宝店铺", status: "已上架", completeness: 100 },
 ];
 
-const publishTasks = [
+let publishTasks = [
   { id: "PUB001", productId: "P1001", platform: "小红书", account: "小红书种草号", status: "待发布", time: "今天 18:30", attachProduct: true },
   { id: "PUB002", productId: "P1002", platform: "视频号", account: "测评号 B", status: "待素材", time: "明天 10:00", attachProduct: false },
   { id: "PUB003", productId: "P1003", platform: "抖音", account: "促销号 C", status: "已暂停", time: "库存恢复后", attachProduct: true },
 ];
 
-const accounts = [
+let accounts = [
   { id: "AC001", platform: "抖音", name: "抖店主账号", type: "店铺账号", auth: "已授权", rule: "上架前必须审核", persona: "商品管理" },
   { id: "AC002", platform: "抖音", name: "抖音内容号 A", type: "内容账号", auth: "已授权", rule: "每天最多 3 条", persona: "种草展示" },
   { id: "AC003", platform: "小红书", name: "小红书种草号", type: "内容账号", auth: "已授权", rule: "发布前必须审核", persona: "生活方式种草" },
   { id: "AC004", platform: "视频号", name: "测评号 B", type: "内容账号", auth: "授权即将过期", rule: "失败后重试 1 次", persona: "测评讲解" },
 ];
 
-const logs = [
+let logs = [
   { productId: "P1001", text: "AI 图片生成完成，新增 4 个主图版本", time: "15:20" },
   { productId: "P1001", text: "生成发布文案 6 版，种草版已加入审核", time: "15:08" },
   { productId: "P1004", text: "视频生成任务进入 Running 状态", time: "14:55" },
@@ -159,6 +161,70 @@ const titles = {
 const root = document.querySelector("#viewRoot");
 const pageTitle = document.querySelector("#pageTitle");
 const toast = document.querySelector("#toast");
+
+function getDataState() {
+  return {
+    products,
+    workflows,
+    assets,
+    reviews,
+    listingTasks,
+    publishTasks,
+    accounts,
+    logs,
+  };
+}
+
+function applyDataState(data) {
+  products = Array.isArray(data.products) ? data.products : products;
+  workflows = Array.isArray(data.workflows) ? data.workflows : workflows;
+  assets = Array.isArray(data.assets) ? data.assets : assets;
+  reviews = Array.isArray(data.reviews) ? data.reviews : reviews;
+  listingTasks = Array.isArray(data.listingTasks) ? data.listingTasks : listingTasks;
+  publishTasks = Array.isArray(data.publishTasks) ? data.publishTasks : publishTasks;
+  accounts = Array.isArray(data.accounts) ? data.accounts : accounts;
+  logs = Array.isArray(data.logs) ? data.logs : logs;
+
+  if (!productById(state.selectedProductId)) {
+    state.selectedProductId = products[0]?.id || "";
+  }
+  if (!reviews.some((item) => item.id === state.selectedReviewId)) {
+    state.selectedReviewId = reviews[0]?.id || "";
+  }
+}
+
+async function loadRemoteState() {
+  if (!API_ENABLED) return;
+
+  try {
+    const response = await fetch("/api/state", { cache: "no-store" });
+    if (!response.ok) throw new Error("Failed to load state");
+    const data = await response.json();
+
+    if (Array.isArray(data.products) && data.products.length > 0) {
+      applyDataState(data);
+      return;
+    }
+
+    await persistState();
+  } catch (error) {
+    showToast("未连接本地数据服务，当前使用静态演示数据。");
+  }
+}
+
+async function persistState() {
+  if (!API_ENABLED) return;
+
+  try {
+    await fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(getDataState()),
+    });
+  } catch (error) {
+    showToast("数据保存失败，请确认本地服务仍在运行。");
+  }
+}
 
 function productById(id) {
   return products.find((item) => item.id === id) || products[0];
@@ -897,6 +963,7 @@ document.addEventListener("click", (event) => {
   }
   if (action === "run-generator") {
     createGeneratedAsset(state.selectedProductId, state.activeGenerator);
+    persistState();
     showToast("生成任务已完成模拟执行，结果已进入素材库和审核队列。");
     renderGenerator();
     return;
@@ -929,6 +996,7 @@ document.addEventListener("click", (event) => {
       }
       if (review.status === "审核驳回") product.status = "异常";
       logs.unshift({ productId: review.productId, text: `${review.target}：${review.status}`, time: "刚刚" });
+      persistState();
       showToast(`审核结果已更新：${review.status}`);
     }
     renderReview();
@@ -945,6 +1013,7 @@ document.addEventListener("click", (event) => {
       time: "今天 20:00",
       attachProduct: true,
     });
+    persistState();
     showToast("发布任务已创建，并完成库存校验。");
     setView("publish");
     return;
@@ -960,6 +1029,7 @@ document.addEventListener("click", (event) => {
       reviewer: "运营审核",
       reason: "手动提交审核",
     });
+    persistState();
     showToast("已加入审核队列。");
     setView("review");
     return;
@@ -989,6 +1059,7 @@ document.addEventListener("click", (event) => {
       specs: "待补充",
     });
     state.selectedProductId = id;
+    persistState();
     showToast("已按弱信息创建商品档案，可继续生成素材。");
     renderProducts();
     return;
@@ -1005,6 +1076,7 @@ document.addEventListener("click", (event) => {
     });
     product.listingStatus = product.stock === 0 ? "库存拦截" : "草稿中";
     logs.unshift({ productId: product.id, text: "已创建上架草稿并完成库存校验", time: "刚刚" });
+    persistState();
     showToast("上架草稿已创建。");
     renderPublish();
     return;
@@ -1021,6 +1093,7 @@ document.addEventListener("click", (event) => {
         task.time = "库存恢复后待排期";
       });
     logs.unshift({ productId: "P1003", text: "库存同步恢复，待发布任务已恢复", time: "刚刚" });
+    persistState();
     showToast("库存已同步，售罄商品恢复为待发布。");
     renderInventory();
     return;
@@ -1041,4 +1114,9 @@ document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
-render();
+async function initApp() {
+  await loadRemoteState();
+  render();
+}
+
+initApp();

@@ -1,0 +1,11 @@
+{
+  "name": "yunyingxitong",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI ecommerce operations automation system MVP",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check server.js"
+  }
+}
+
