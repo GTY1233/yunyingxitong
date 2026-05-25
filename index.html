@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 电商自动运营系统 MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div>
+            <strong>运营系统</strong>
+            <span>MVP 工作台</span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item active" data-view="dashboard">首页工作台</button>
+          <button class="nav-item" data-view="products">商品中心</button>
+          <button class="nav-item" data-view="generator">AI 生成</button>
+          <button class="nav-item" data-view="review">审核中心</button>
+          <button class="nav-item" data-view="publish">上架与发布</button>
+          <button class="nav-item" data-view="assets">素材库</button>
+          <button class="nav-item" data-view="accounts">平台账号</button>
+          <button class="nav-item" data-view="inventory">库存中心</button>
+          <button class="nav-item" data-view="data">数据中心</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <span class="label">当前阶段</span>
+          <strong>MVP 半自动闭环</strong>
+          <p>已预留自动上架、自动发布和工作流节点。</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">商品中心 + AI 生成 + 审核 + 上架发布</p>
+            <h1 id="pageTitle">首页工作台</h1>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-btn" data-action="go" data-view="generator">生成素材</button>
+            <button class="primary-btn" data-action="go" data-view="products">新建商品</button>
+          </div>
+        </header>
+
+        <section id="viewRoot" class="view-root" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
+
