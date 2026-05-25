@@ -50,5 +50,6 @@ http://localhost:4173
 - [业务链路与状态机](./docs/03-workflows-and-state-machines.md)
 - [信息架构与关键页面](./docs/04-information-architecture.md)
 - [开发实施计划](./docs/05-implementation-plan.md)
-- [产品完整里程碑](./docs/06-milestones.md)
+- [产品路线图与完整里程碑](./docs/06-roadmap-and-milestones.md)
 - [M1 API 契约](./docs/07-m1-api-contract.md)
+- [当前进展总结](./docs/08-current-progress.md)
