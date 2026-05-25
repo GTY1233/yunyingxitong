@@ -51,3 +51,4 @@ http://localhost:4173
 - [信息架构与关键页面](./docs/04-information-architecture.md)
 - [开发实施计划](./docs/05-implementation-plan.md)
 - [产品完整里程碑](./docs/06-milestones.md)
+- [M1 API 契约](./docs/07-m1-api-contract.md)

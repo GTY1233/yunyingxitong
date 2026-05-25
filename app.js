@@ -226,6 +226,48 @@ async function persistState() {
   }
 }
 
+async function runApiAction(path, payload) {
+  if (!API_ENABLED) return false;
+
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || "API action failed");
+    }
+    if (result.data) applyDataState(result.data);
+    return true;
+  } catch (error) {
+    showToast("接口调用失败，已保留当前页面状态。");
+    return false;
+  }
+}
+
+async function createApiResource(resource, payload) {
+  if (!API_ENABLED) return false;
+
+  try {
+    const response = await fetch(`/api/resources/${resource}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || "Resource create failed");
+    }
+    if (result.data) applyDataState(result.data);
+    return true;
+  } catch (error) {
+    showToast("资源保存失败，请检查本地服务。");
+    return false;
+  }
+}
+
 function productById(id) {
   return products.find((item) => item.id === id) || products[0];
 }
@@ -937,7 +979,7 @@ function createGeneratedAsset(productId, kind) {
   logs.unshift({ productId, text: `${label}生成完成，已加入审核队列`, time: "刚刚" });
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
 
@@ -962,6 +1004,17 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "run-generator") {
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/generate", {
+        productId: state.selectedProductId,
+        kind: state.activeGenerator,
+      });
+      if (ok) {
+        showToast("生成任务已通过 API 执行，结果已进入素材库和审核队列。");
+        renderGenerator();
+      }
+      return;
+    }
     createGeneratedAsset(state.selectedProductId, state.activeGenerator);
     persistState();
     showToast("生成任务已完成模拟执行，结果已进入素材库和审核队列。");
@@ -979,12 +1032,25 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (["approve-review", "change-approve", "reject-review", "regen-review"].includes(action)) {
+    const decisionMap = {
+      "approve-review": "审核通过",
+      "change-approve": "修改后通过",
+      "reject-review": "审核驳回",
+      "regen-review": "要求重新生成",
+    };
+    if (API_ENABLED) {
+      const ok = await runApiAction(`/api/actions/reviews/${target.dataset.id}/decision`, {
+        decision: decisionMap[action],
+      });
+      if (ok) {
+        showToast(`审核结果已通过 API 更新：${decisionMap[action]}`);
+        renderReview();
+      }
+      return;
+    }
     const review = reviews.find((item) => item.id === target.dataset.id);
     if (review) {
-      if (action === "approve-review") review.status = "审核通过";
-      if (action === "change-approve") review.status = "修改后通过";
-      if (action === "reject-review") review.status = "审核驳回";
-      if (action === "regen-review") review.status = "要求重新生成";
+      review.status = decisionMap[action];
       const product = productById(review.productId);
       const relatedAsset = assets.find((asset) => asset.name === review.target);
       if (relatedAsset) relatedAsset.status = review.status;
@@ -1004,6 +1070,14 @@ document.addEventListener("click", (event) => {
   }
   if (action === "create-publish") {
     const productId = target.dataset.product || state.selectedProductId;
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/publish-tasks", { productId });
+      if (ok) {
+        showToast("发布任务已通过 API 创建，并完成库存校验。");
+        setView("publish");
+      }
+      return;
+    }
     publishTasks.unshift({
       id: `PUB${String(publishTasks.length + 1).padStart(3, "0")}`,
       productId,
@@ -1020,6 +1094,18 @@ document.addEventListener("click", (event) => {
   }
   if (action === "create-review" || action === "asset-review") {
     const productId = target.dataset.product || state.selectedProductId;
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/reviews", {
+        productId,
+        target: `${productById(productId).name} 手动提交项`,
+        type: "素材",
+      });
+      if (ok) {
+        showToast("已通过 API 加入审核队列。");
+        setView("review");
+      }
+      return;
+    }
     reviews.unshift({
       id: `R${String(reviews.length + 1).padStart(3, "0")}`,
       productId,
@@ -1036,7 +1122,7 @@ document.addEventListener("click", (event) => {
   }
   if (action === "mock-create") {
     const id = `P${1000 + products.length + 1}`;
-    products.unshift({
+    const draftProduct = {
       id,
       name: "弱信息新商品",
       code: `SKU-DRAFT-${products.length + 1}`,
@@ -1057,7 +1143,17 @@ document.addEventListener("click", (event) => {
       colors: ["#e2e8f0", "#93c5fd"],
       sellingPoints: "只上传了基础素材，等待 AI 识别和补全。",
       specs: "待补充",
-    });
+    };
+    if (API_ENABLED) {
+      const ok = await createApiResource("products", draftProduct);
+      if (ok) {
+        state.selectedProductId = id;
+        showToast("已通过 API 创建弱信息商品档案。");
+        renderProducts();
+      }
+      return;
+    }
+    products.unshift(draftProduct);
     state.selectedProductId = id;
     persistState();
     showToast("已按弱信息创建商品档案，可继续生成素材。");
@@ -1066,6 +1162,16 @@ document.addEventListener("click", (event) => {
   }
   if (action === "create-listing") {
     const product = productById(state.selectedProductId);
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/listing-tasks", {
+        productId: product.id,
+      });
+      if (ok) {
+        showToast("上架草稿已通过 API 创建。");
+        renderPublish();
+      }
+      return;
+    }
     listingTasks.unshift({
       id: `L${String(listingTasks.length + 1).padStart(3, "0")}`,
       productId: product.id,
@@ -1082,6 +1188,17 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "sync-stock") {
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/inventory/sync", {
+        productId: "P1003",
+        stock: 45,
+      });
+      if (ok) {
+        showToast("库存已通过 API 同步，售罄商品恢复为待发布。");
+        renderInventory();
+      }
+      return;
+    }
     const paused = productById("P1003");
     paused.stock = 45;
     paused.status = "待发布";
