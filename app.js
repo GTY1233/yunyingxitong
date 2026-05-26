@@ -203,12 +203,12 @@ let logs = [
 ];
 
 const titles = {
-  dashboard: "待办收件箱",
+  dashboard: "今日工作台",
   products: "商品运营台",
   generator: "AI 生成工作台",
   tasks: "生成任务",
-  publish: "发布中心",
-  assets: "全量成品库",
+  publish: "发布任务",
+  assets: "成品库",
   accounts: "平台账号",
   inventory: "库存中心",
   data: "数据中心",
@@ -1988,15 +1988,122 @@ function renderAutoOpsPanel() {
   return `<section class="panel"><div class="panel-header"><div><h2>全自动运营</h2><p>上传商品后自动跑主流程，你只需在预览确认和异常处介入。</p></div><button class="ghost-btn" type="button" data-action="go" data-view="workflows">流程中心</button></div><div class="info-grid" style="margin-bottom:14px">${infoBox("可启动", eligible.length)}${infoBox("运行中", running)}${infoBox("待你确认", waiting)}</div><div class="batch-workflow-bar"><label class="field inline-field checkbox-field"><input type="checkbox" id="autoOpsMultiAccount" checked /><span>多账号矩阵分发</span></label><label class="field inline-field checkbox-field"><input type="checkbox" id="autoOpsAutoExecute" checked /><span>确认后自动上架发布</span></label><button class="primary-btn" type="button" data-action="batch-start-auto-ops" ${eligible.length ? "" : "disabled"}>一键全自动（${eligible.length}）</button></div><p class="meta">新建商品时可勾选「创建后自动跑全流程」，或在此批量启动已有商品。</p></section>`;
 }
 
+function getProductNextAction(product) {
+  const missing = countMissingMaterials(product);
+  const productAssets = getProductAssets(product.id);
+  const readyAsset = productAssets.find((item) => item.status === "已生成");
+  const activeTask = getProductTasks(product.id).find((item) => ACTIVE_TASK_STATUSES.includes(item.status));
+  const failedTask = getProductTasks(product.id).find((item) => item.status === "失败");
+  const workflow = getProductWorkflowInstance(product.id);
+  const hasPublish = getProductPublishTasks(product.id).length > 0 || product.publishStatus === "已发布";
+
+  if (product.stock === 0) {
+    return {
+      tone: "danger",
+      step: "先处理库存",
+      title: "库存为 0，系统会暂停上架和发布",
+      detail: "先恢复库存，再继续生成发布任务。",
+      button: "去库存中心",
+      actionAttrs: `data-action="go" data-view="inventory"`,
+    };
+  }
+  if (failedTask) {
+    return {
+      tone: "danger",
+      step: "处理失败任务",
+      title: `${failedTask.label || "生成"}失败，需要重试或改参数`,
+      detail: failedTask.error || "失败任务不会阻塞其他商品，但会影响该商品继续发布。",
+      button: "查看任务",
+      actionAttrs: `data-action="go" data-view="tasks"`,
+    };
+  }
+  if (activeTask) {
+    return {
+      tone: "info",
+      step: "等待生成完成",
+      title: `${activeTask.label || "素材"}正在生成`,
+      detail: "生成完成后会自动进入成品库，可在运营台预览并发布。",
+      button: "查看任务",
+      actionAttrs: `data-action="go" data-view="tasks"`,
+    };
+  }
+  if (workflow?.status === "等待确认") {
+    return {
+      tone: "primary",
+      step: "预览确认",
+      title: "自动化流程正在等你确认成品",
+      detail: "确认后流程会继续创建上架和发布任务。",
+      button: "去确认",
+      actionAttrs: `data-action="open-product-desk" data-product="${product.id}" data-workflow="${workflow.id}"`,
+    };
+  }
+  if (missing) {
+    return {
+      tone: "primary",
+      step: "补齐素材",
+      title: `还缺 ${missing} 类素材，先一键补齐`,
+      detail: "系统会按商品资料创建图片、文案、视频生成任务。",
+      button: `一键补齐 ${missing} 项`,
+      actionAttrs: `data-action="fill-missing-materials" data-product="${product.id}"`,
+    };
+  }
+  if (readyAsset && !hasPublish) {
+    return {
+      tone: "primary",
+      step: "确认发布",
+      title: "已有可用成品，下一步可以创建发布任务",
+      detail: "先用当前成品创建发布任务，也可以在中栏切换其他成品。",
+      button: "用推荐成品发布",
+      actionAttrs: `data-action="publish-asset" data-id="${readyAsset.id}"`,
+    };
+  }
+  if (hasPublish) {
+    return {
+      tone: "success",
+      step: "跟进发布",
+      title: "发布任务已创建，去发布任务中心查看状态",
+      detail: "如果平台接口不可用，仍可导出素材包手动发布。",
+      button: "查看发布任务",
+      actionAttrs: `data-action="go" data-view="publish"`,
+    };
+  }
+  return {
+    tone: "primary",
+    step: "启动流程",
+    title: "从自动化流程开始处理这个商品",
+    detail: "适合资料基本完整、希望系统自动串联生成与发布的商品。",
+    button: "启动流程",
+    actionAttrs: `data-action="start-workflow" data-product="${product.id}"`,
+  };
+}
+
+function renderOperatingPath() {
+  const steps = [
+    ["1", "看今日工作台", "系统只把需要你处理的事项推到这里。"],
+    ["2", "进商品运营台", "围绕一个商品完成生成、预览和发布。"],
+    ["3", "确认发布任务", "检查上架草稿、发布账号、库存和导出。"],
+    ["4", "看数据和策略", "用表现数据优化模板、账号和下一轮内容。"],
+  ];
+  return `<section class="operator-guide"><div class="guide-copy"><span class="guide-label">推荐工作方式</span><h2>今天先处理什么，系统应该直接告诉你</h2><p>这个系统不是让你在工具里找功能，而是按商品运营顺序推进：先看待办，再处理单个商品，最后跟进发布和数据。</p><div class="button-row"><button class="primary-btn" data-action="go" data-view="products">开始处理商品</button><button class="ghost-btn" data-action="open-product-form">新建商品</button></div></div><div class="guide-steps">${steps
+    .map(([number, title, detail]) => `<div class="guide-step"><span>${number}</span><strong>${title}</strong><p>${detail}</p></div>`)
+    .join("")}</div></section>`;
+}
+
+function renderNextBestAction(product) {
+  const next = getProductNextAction(product);
+  return `<section class="next-action-card next-${next.tone}"><div><span class="guide-label">当前商品下一步</span><h2>${escapeHtml(next.title)}</h2><p>${escapeHtml(next.detail)}</p><div class="next-meta">${escapeHtml(product.name)} · ${escapeHtml(next.step)}</div></div><button class="primary-btn" type="button" ${next.actionAttrs}>${escapeHtml(next.button)}</button></section>`;
+}
+
 function renderDashboard() {
   const inbox = buildInboxItems();
-  root.innerHTML = `${renderKpis()}${renderAutoOpsPanel()}<section class="panel"><div class="panel-header"><div><h2>待办收件箱</h2><p>只显示需要你处理的事项，点击后直接进入对应商品运营台。</p></div><button class="ghost-btn" data-action="go" data-view="products">全部商品</button></div><div class="list inbox-list">${inbox.length ? inbox.map(renderInboxItem).join("") : `<div class="empty-state"><h3>暂无待办</h3><p class="meta">可以去商品运营台新建商品，或一键补全素材。</p><button class="primary-btn" data-action="go" data-view="products">打开商品运营台</button></div>`}</div></section><section class="panel"><div class="panel-header"><div><h2>商品概览</h2><p>快速进入某个商品的运营台。</p></div></div>${renderProductTable(products)}</section>`;
+  const selected = productById(state.selectedProductId);
+  root.innerHTML = `${renderOperatingPath()}${renderNextBestAction(selected)}${renderKpis()}<section class="grid two-col dashboard-main"><div class="panel"><div class="panel-header"><div><h2>需要你处理</h2><p>这里只放会阻塞运营继续推进的事项。</p></div><button class="ghost-btn" data-action="go" data-view="products">全部商品</button></div><div class="list inbox-list">${inbox.length ? inbox.map(renderInboxItem).join("") : `<div class="empty-state"><h3>暂无待办</h3><p class="meta">可以去商品运营台新建商品，或一键补全素材。</p><button class="primary-btn" data-action="go" data-view="products">打开商品运营台</button></div>`}</div></div><div>${renderAutoOpsPanel()}</div></section><section class="panel"><div class="panel-header"><div><h2>商品概览</h2><p>选一个商品进入运营台，按 1-2-3 完成处理。</p></div></div>${renderProductTable(products)}</section>`;
 }
 
 function renderProducts() {
   const product = productById(state.selectedProductId);
   const productLogs = logs.filter((item) => item.productId === product.id).slice(0, 8);
-  root.innerHTML = `<section class="panel desk-header-panel"><div class="panel-header"><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.code)} / ${escapeHtml(product.category)} / 库存 ${product.stock}</p></div>${statusPill(product.status)}</div>${renderProductPicker()}${renderProgressSteps(product)}</section>${renderDeskStrategyPanel(product)}${renderDeskWorkflowPanel(product)}<section class="product-desk">${renderInlineGenerator(product)}${renderDeskAssetPanel(product)}${renderDeskPublishPanel(product)}</section><section class="panel desk-meta-panel"><div class="panel-header"><div><h3>商品资料与日志</h3><p>必要信息保留在此，默认折叠，需要时再展开。</p></div><button class="ghost-btn" type="button" data-action="toggle-product-edit">${state.productEditing || state.productDeskExpanded ? "收起" : "展开编辑"}</button></div>${
+  root.innerHTML = `<section class="panel desk-header-panel"><div class="panel-header"><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.code)} / ${escapeHtml(product.category)} / 库存 ${product.stock}</p></div>${statusPill(product.status)}</div>${renderProductPicker()}${renderProgressSteps(product)}</section>${renderNextBestAction(product)}<section class="product-desk">${renderInlineGenerator(product)}${renderDeskAssetPanel(product)}${renderDeskPublishPanel(product)}</section><section class="grid two-col secondary-workspace"><div>${renderDeskStrategyPanel(product)}</div><div>${renderDeskWorkflowPanel(product)}</div></section><section class="panel desk-meta-panel"><div class="panel-header"><div><h3>商品资料与日志</h3><p>必要信息保留在此，默认折叠，需要时再展开。</p></div><button class="ghost-btn" type="button" data-action="toggle-product-edit">${state.productEditing || state.productDeskExpanded ? "收起" : "展开编辑"}</button></div>${
     state.productEditing || state.productDeskExpanded
       ? `<div class="detail-layout"><div class="detail-hero">${thumb(product, "large-thumb")}${state.productEditing ? `<form id="editProductForm" class="product-form detail-form">${renderProductFormFields(productToFormValues(product), "edit")}</form>` : `<div class="info-grid">${infoBox("价格", `¥${product.price}`)}${infoBox("目标平台", product.platforms.join("、"))}${infoBox("绑定账号", product.accounts.join("、"))}${infoBox("卖点", product.sellingPoints)}${infoBox("规格", product.specs)}</div>`}</div><div class="timeline">${productLogs.map(renderLog).join("") || "<p class='meta'>暂无日志。</p>"}</div></div>`
       : `<p class="meta">图片 ${product.imageStatus} / 文案 ${product.copyStatus} / 视频 ${product.videoStatus} / 上架 ${product.listingStatus} / 发布 ${product.publishStatus}</p>`

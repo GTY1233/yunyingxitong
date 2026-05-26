@@ -18,16 +18,16 @@
         </div>
 
         <nav class="nav nav-primary" aria-label="主导航">
-          <button class="nav-item active" data-view="dashboard">待办</button>
+          <button class="nav-item active" data-view="dashboard">今日工作台</button>
           <button class="nav-item" data-view="products">商品运营台</button>
-          <button class="nav-item" data-view="publish">发布中心</button>
+          <button class="nav-item" data-view="publish">发布任务</button>
         </nav>
 
         <nav class="nav nav-secondary" aria-label="更多功能">
-          <span class="nav-label">更多</span>
+          <span class="nav-label">系统管理</span>
           <button class="nav-item" data-view="tasks">生成任务</button>
           <button class="nav-item" data-view="workflows">自动化流程</button>
-          <button class="nav-item" data-view="assets">全量成品库</button>
+          <button class="nav-item" data-view="assets">成品库</button>
           <button class="nav-item" data-view="accounts">平台账号</button>
           <button class="nav-item" data-view="inventory">库存</button>
           <button class="nav-item" data-view="data">数据</button>
@@ -35,16 +35,16 @@
 
         <div class="sidebar-card">
           <span class="label">当前阶段</span>
-          <strong>M13 流程编排</strong>
-          <p>自定义流程模板 + 模板 A/B 效果分析，数据驱动优化生成策略。</p>
+          <strong>推荐路径</strong>
+          <p>今日工作台 → 商品运营台 → 发布任务。高级功能放在系统管理。</p>
         </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">待办驱动 · 单商品闭环 · 必要能力不散落</p>
-            <h1 id="pageTitle">待办收件箱</h1>
+            <p class="eyebrow">先处理待办，再围绕商品完成生成、确认、发布</p>
+            <h1 id="pageTitle">今日工作台</h1>
           </div>
           <div class="top-actions" id="topActions"></div>
         </header>
@@ -55,6 +55,6 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="./app.js?v=1.4.0" defer></script>
+    <script src="./app.js?v=1.5.0" defer></script>
   </body>
 </html>
