@@ -13,39 +13,40 @@
           <div class="brand-mark">AI</div>
           <div>
             <strong>运营系统</strong>
-            <span>MVP 工作台</span>
+            <span>商品驱动工作台</span>
           </div>
         </div>
 
-        <nav class="nav" aria-label="主导航">
-          <button class="nav-item active" data-view="dashboard">首页工作台</button>
-          <button class="nav-item" data-view="products">商品中心</button>
-          <button class="nav-item" data-view="generator">AI 生成</button>
-          <button class="nav-item" data-view="review">审核中心</button>
-          <button class="nav-item" data-view="publish">上架与发布</button>
-          <button class="nav-item" data-view="assets">素材库</button>
+        <nav class="nav nav-primary" aria-label="主导航">
+          <button class="nav-item active" data-view="dashboard">待办</button>
+          <button class="nav-item" data-view="products">商品运营台</button>
+          <button class="nav-item" data-view="publish">发布中心</button>
+        </nav>
+
+        <nav class="nav nav-secondary" aria-label="更多功能">
+          <span class="nav-label">更多</span>
+          <button class="nav-item" data-view="tasks">生成任务</button>
+          <button class="nav-item" data-view="workflows">自动化流程</button>
+          <button class="nav-item" data-view="assets">全量成品库</button>
           <button class="nav-item" data-view="accounts">平台账号</button>
-          <button class="nav-item" data-view="inventory">库存中心</button>
-          <button class="nav-item" data-view="data">数据中心</button>
+          <button class="nav-item" data-view="inventory">库存</button>
+          <button class="nav-item" data-view="data">数据</button>
         </nav>
 
         <div class="sidebar-card">
           <span class="label">当前阶段</span>
-          <strong>MVP 半自动闭环</strong>
-          <p>已预留自动上架、自动发布和工作流节点。</p>
+          <strong>M13 流程编排</strong>
+          <p>自定义流程模板 + 模板 A/B 效果分析，数据驱动优化生成策略。</p>
         </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">商品中心 + AI 生成 + 审核 + 上架发布</p>
-            <h1 id="pageTitle">首页工作台</h1>
+            <p class="eyebrow">待办驱动 · 单商品闭环 · 必要能力不散落</p>
+            <h1 id="pageTitle">待办收件箱</h1>
           </div>
-          <div class="top-actions">
-            <button class="ghost-btn" data-action="go" data-view="generator">生成素材</button>
-            <button class="primary-btn" data-action="go" data-view="products">新建商品</button>
-          </div>
+          <div class="top-actions" id="topActions"></div>
         </header>
 
         <section id="viewRoot" class="view-root" aria-live="polite"></section>
@@ -54,7 +55,6 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="./app.js" defer></script>
+    <script src="./app.js?v=1.4.0" defer></script>
   </body>
 </html>
-

@@ -5,7 +5,6 @@
   "description": "AI ecommerce operations automation system MVP",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check app.js && node --check server.js"
+    "check": "node scripts/check-js.js"
   }
 }
-

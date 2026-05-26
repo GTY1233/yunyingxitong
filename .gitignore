@@ -5,6 +5,7 @@ dist/
 build/
 .env
 .env.*
+!.env.example
 *.log
 data/db.json
-
+data/generated/
