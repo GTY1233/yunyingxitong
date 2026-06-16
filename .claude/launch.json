@@ -4,7 +4,7 @@
     {
       "name": "api",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start:api"],
+      "runtimeArgs": ["run", "dev:api"],
       "port": 4174
     },
     {

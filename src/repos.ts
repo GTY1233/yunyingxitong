@@ -32,6 +32,7 @@ interface Repos {
     deriveProductMediaStatus(productId: string): Promise<any>;
     deriveWorkflowProgress(workflowId: string): Promise<number>;
   };
+  stats: { dashboard(): Promise<any> };
   client: { getPrisma(): any; disconnect(): Promise<void> };
 }
 

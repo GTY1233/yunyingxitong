@@ -10,6 +10,7 @@ import { registerAuth } from "./plugins/auth.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { healthRoutes } from "./routes/health.js";
 import { productRoutes } from "./routes/products.js";
+import { statsRoutes } from "./routes/stats.js";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } });
 
@@ -41,6 +42,7 @@ async function main() {
 
   await registerAuth(app);
   await healthRoutes(app);
+  await statsRoutes(app);
   await productRoutes(app);
   await accountRoutes(app);
 

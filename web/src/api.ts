@@ -37,8 +37,45 @@ export interface ProductDetail extends Product {
   derivedStatus: { imageStatus: string; copyStatus: string; videoStatus: string };
 }
 
+export interface Account {
+  id: string;
+  name?: string;
+  platform?: string;
+  type?: string;
+  role?: string;
+  auth?: string;
+  rule?: string;
+  isDemo?: boolean;
+}
+
+export interface DashboardStats {
+  products: number;
+  lowStock: number;
+  accounts: number;
+  assets: number;
+  productsByStatus: Record<string, number>;
+  accountsByRole: Record<string, number>;
+  assetsByKind: Record<string, number>;
+}
+
+export interface NewProduct {
+  name: string;
+  category?: string;
+  priceCents?: number;
+  stock?: number;
+  warningStock?: number;
+  sellingPoints?: string;
+  specs?: string;
+  platforms?: string[];
+}
+
 export const api = {
+  getStats: () => request<DashboardStats>("/api/v2/stats"),
   listProducts: () => request<Product[]>("/api/v2/products"),
   getProduct: (id: string) => request<ProductDetail>(`/api/v2/products/${id}`),
-  listAccounts: () => request<any[]>("/api/v2/accounts"),
+  createProduct: (body: NewProduct) =>
+    request<Product>("/api/v2/products", { method: "POST", body: JSON.stringify(body) }),
+  updateProduct: (id: string, body: Partial<NewProduct>) =>
+    request<Product>(`/api/v2/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  listAccounts: () => request<Account[]>("/api/v2/accounts"),
 };
