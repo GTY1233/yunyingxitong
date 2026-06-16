@@ -13,8 +13,21 @@ import { healthRoutes } from "./routes/health.js";
 import { productRoutes } from "./routes/products.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workbenchRoutes } from "./routes/workbench.js";
+import { workflowRoutes } from "./routes/workflows.js";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } });
+
+// 容忍空 body 的 application/json POST(节点动作类端点无 body,但前端会带 content-type)。
+app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+  const s = (body as string) || "";
+  if (s.trim() === "") return done(null, {});
+  try {
+    done(null, JSON.parse(s));
+  } catch (err) {
+    (err as Error & { statusCode?: number }).statusCode = 400;
+    done(err as Error, undefined);
+  }
+});
 
 async function main() {
   await app.register(swagger, {
@@ -49,6 +62,7 @@ async function main() {
   await productRoutes(app);
   await assetRoutes(app);
   await accountRoutes(app);
+  await workflowRoutes(app);
 
   const port = Number(process.env.API_PORT || 4174);
   await app.listen({ port, host: "0.0.0.0" });

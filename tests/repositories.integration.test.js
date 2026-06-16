@@ -10,6 +10,7 @@ const TEST_DB = path.join(process.cwd(), "prisma", "test.db");
 // 必须在 repos 首次 getPrisma() 之前设好,故用动态 import。
 process.env.DATABASE_URL = "file:./test.db";
 const repos = (await import("../lib/repositories/index.js")).default;
+const engine = (await import("../lib/workflow/service.js")).default;
 
 beforeAll(() => {
   for (const f of [TEST_DB, `${TEST_DB}-journal`]) {
@@ -99,5 +100,48 @@ describe("仓储层 CRUD + 派生状态(对临时库)", () => {
     expect((await repos.products.list()).length).toBe(0);
     // 但记录仍在(仅打了 deletedAt)
     expect(await repos.products.getById(productId)).not.toBeNull();
+  });
+});
+
+describe("工作流引擎(对临时库)", () => {
+  it("创建淘宝工作流并逐节点推进到已完成", async () => {
+    const p = await repos.products.create({ name: "工作流商品", stock: 10 });
+    let wf = await engine.createForProduct(p.id, "淘宝");
+    expect(wf.nodes.length).toBe(6);
+    expect(wf.nodes[0].status).toBe("已成功"); // 商品资料自动完成
+    expect(wf.nodes[1].status).toBe("可执行");
+    expect(wf.progress).toBe(17);
+
+    let guard = 0;
+    while (wf.status !== "已完成" && guard++ < 12) {
+      const node = wf.nodes.find((n) => !["已成功", "已跳过"].includes(n.status));
+      const action = node.status === "可执行" ? "execute" : "confirm";
+      wf = await engine.act(wf.id, node.id, action);
+    }
+    expect(wf.status).toBe("已完成");
+    expect(wf.progress).toBe(100);
+  });
+
+  it("同商品同平台重复创建被拒", async () => {
+    const p = await repos.products.create({ name: "重复流商品", stock: 1 });
+    await engine.createForProduct(p.id, "抖音");
+    await expect(engine.createForProduct(p.id, "抖音")).rejects.toThrow(/已有进行中/);
+  });
+
+  it("非法动作抛错(对待确认节点 execute)", async () => {
+    const p = await repos.products.create({ name: "非法动作商品", stock: 1 });
+    const wf = await engine.createForProduct(p.id, "小红书");
+    // 推进到一个 manual(待确认)节点
+    let cur = wf;
+    let guard = 0;
+    while (guard++ < 12) {
+      const node = cur.nodes.find((n) => !["已成功", "已跳过"].includes(n.status));
+      if (node.status === "待确认") {
+        await expect(engine.act(cur.id, node.id, "execute")).rejects.toThrow();
+        return;
+      }
+      cur = await engine.act(cur.id, node.id, "execute");
+    }
+    throw new Error("未遇到待确认节点");
   });
 });
