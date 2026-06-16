@@ -18,6 +18,7 @@ export interface Product {
   category?: string;
   priceCents?: number;
   stock?: number;
+  warningStock?: number;
   status?: string;
   sellingPoints?: string;
   specs?: string;
@@ -69,8 +70,23 @@ export interface NewProduct {
   platforms?: string[];
 }
 
+export interface AssetWithProduct extends Asset {
+  productId: string;
+  status?: string;
+  type?: string;
+  product?: { displayCode?: string; name?: string };
+}
+
+export interface Workbench {
+  lowStock: { id: string; displayCode?: string; name: string; stock?: number; warningStock?: number }[];
+  missingMedia: { id: string; displayCode?: string; name: string; missing: string[] }[];
+}
+
 export const api = {
   getStats: () => request<DashboardStats>("/api/v2/stats"),
+  getWorkbench: () => request<Workbench>("/api/v2/workbench"),
+  listAssets: (kind?: string) =>
+    request<AssetWithProduct[]>(`/api/v2/assets${kind ? `?kind=${kind}` : ""}`),
   listProducts: () => request<Product[]>("/api/v2/products"),
   getProduct: (id: string) => request<ProductDetail>(`/api/v2/products/${id}`),
   createProduct: (body: NewProduct) =>

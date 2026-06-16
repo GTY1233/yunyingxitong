@@ -8,9 +8,11 @@ import Fastify from "fastify";
 import type { AppError } from "./lib/errors.js";
 import { registerAuth } from "./plugins/auth.js";
 import { accountRoutes } from "./routes/accounts.js";
+import { assetRoutes } from "./routes/assets.js";
 import { healthRoutes } from "./routes/health.js";
 import { productRoutes } from "./routes/products.js";
 import { statsRoutes } from "./routes/stats.js";
+import { workbenchRoutes } from "./routes/workbench.js";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } });
 
@@ -43,7 +45,9 @@ async function main() {
   await registerAuth(app);
   await healthRoutes(app);
   await statsRoutes(app);
+  await workbenchRoutes(app);
   await productRoutes(app);
+  await assetRoutes(app);
   await accountRoutes(app);
 
   const port = Number(process.env.API_PORT || 4174);

@@ -20,6 +20,7 @@ interface Repos {
   };
   assets: {
     listByProduct(productId: string, kind?: string): Promise<any[]>;
+    listAll(kind?: string): Promise<any[]>;
     create(data: any): Promise<any>;
     setPrimary(assetId: string, productId: string): Promise<any>;
   };
@@ -32,7 +33,7 @@ interface Repos {
     deriveProductMediaStatus(productId: string): Promise<any>;
     deriveWorkflowProgress(workflowId: string): Promise<number>;
   };
-  stats: { dashboard(): Promise<any> };
+  stats: { dashboard(): Promise<any>; workbench(): Promise<any> };
   client: { getPrisma(): any; disconnect(): Promise<void> };
 }
 
