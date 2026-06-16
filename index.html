@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI 电商自动运营系统 MVP</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>AI 电商自动运营系统</title>
+    <link rel="stylesheet" href="./styles.css?v=1.19.0" />
   </head>
   <body>
     <div class="app-shell">
@@ -13,37 +13,36 @@
           <div class="brand-mark">AI</div>
           <div>
             <strong>运营系统</strong>
-            <span>商品驱动工作台</span>
+            <span>平台工作流</span>
           </div>
         </div>
 
         <nav class="nav nav-primary" aria-label="主导航">
           <button class="nav-item active" data-view="dashboard">今日工作台</button>
-          <button class="nav-item" data-view="products">商品运营台</button>
+          <button class="nav-item" data-view="products">商品管理</button>
+          <button class="nav-item" data-view="workflow">平台工作流</button>
+          <button class="nav-item" data-action="new-product">＋ 新建商品</button>
           <button class="nav-item" data-view="publish">发布任务</button>
+          <button class="nav-item" data-view="materials">素材库</button>
         </nav>
 
-        <nav class="nav nav-secondary" aria-label="更多功能">
-          <span class="nav-label">系统管理</span>
-          <button class="nav-item" data-view="tasks">生成任务</button>
-          <button class="nav-item" data-view="workflows">自动化流程</button>
-          <button class="nav-item" data-view="assets">成品库</button>
+        <nav class="nav nav-secondary" aria-label="必要配置">
+          <span class="nav-label">必要配置</span>
           <button class="nav-item" data-view="accounts">平台账号</button>
           <button class="nav-item" data-view="inventory">库存</button>
-          <button class="nav-item" data-view="data">数据</button>
         </nav>
 
         <div class="sidebar-card">
-          <span class="label">当前阶段</span>
-          <strong>推荐路径</strong>
-          <p>今日工作台 → 商品运营台 → 发布任务。高级功能放在系统管理。</p>
+          <span class="label">M14 核心路径</span>
+          <strong>录入 → 按平台节点推进</strong>
+          <p>抖音全链路；淘宝图+文+上架；小红书含视频发布。</p>
         </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">先处理待办，再围绕商品完成生成、确认、发布</p>
+            <p class="eyebrow">半自动：左栏节点、中间操作、右侧上架发布</p>
             <h1 id="pageTitle">今日工作台</h1>
           </div>
           <div class="top-actions" id="topActions"></div>
@@ -55,6 +54,6 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="./app.js?v=1.5.0" defer></script>
+    <script src="./app.js?v=1.19.0" defer></script>
   </body>
 </html>

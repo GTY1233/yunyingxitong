@@ -1,7 +1,7 @@
 const state = {
-  view: "dashboard",
+  view: "workflow",
   activeGenerator: "image",
-  selectedProductId: "P1001",
+  selectedProductId: "",
   selectedAssetId: "A002",
   selectedTaskId: "GT001",
   productFilter: "all",
@@ -18,18 +18,41 @@ const state = {
   selectedPublishTaskId: "",
   publishFormOpen: false,
   accountFormOpen: false,
+  workflowStartOpen: false,
+  selectedPlatformWorkflowId: "",
+  workflowPlatformTab: "抖音",
+  selectedGenerationTemplateId: "",
   platformCapabilities: [],
-  analytics: null,
-  productStrategy: null,
-  strategySummary: null,
-  templateAb: null,
-  workflowNodeCatalog: [],
-  customWorkflowTemplates: [],
-  orchestratorSteps: [],
-  orchestratorEditingId: "",
   copyProvider: "template",
   imageProvider: "template",
   videoProvider: "template",
+  launchPlatforms: [],
+  uploadedImages: [],
+  productImages: [],
+  allProductImages: [],
+  modelImages: [],
+  templateVideos: [],
+  selectedModelImageUrls: [],
+  selectedSlot3Urls: [],
+  productReferenceUrls: [],
+  videoRefUploadedImages: [],
+  productSearch: "",
+  productFilter: "all",
+  workflowLaunchOpen: false,
+  launchDraft: {
+    name: "",
+    category: "",
+    price: "",
+    stock: "",
+    sellingPoints: "",
+    specs: "",
+  },
+  generationPresets: JSON.parse(localStorage.getItem("yunying_genPresets") || "[]"),
+  lastTemplateSelections: JSON.parse(localStorage.getItem("yunying_lastTplSelections") || "{}"),
+  presetFormOpen: false,
+  editingPresetId: "",
+  presetPlatform: "",
+  presetKind: "",
 };
 
 let pollTimer = null;
@@ -150,8 +173,22 @@ const DEFAULT_WORKFLOW_TEMPLATES = [
 ];
 
 let workflowInstances = [];
+let platformWorkflows = [];
 
 let workflowTemplates = DEFAULT_WORKFLOW_TEMPLATES;
+
+const LOCAL_GENERATION_TEMPLATES = [
+  { id: "dy-image-main", platform: "抖音", kind: "image", name: "抖音主图 1:1", description: "四张主图，适合抖店商品卡。", defaults: { imageType: "商品主图", imageSize: "1:1 平台主图", imageCount: 4 }, promptHint: "真实商品质感，干净背景。" },
+  { id: "dy-image-detail", platform: "抖音", kind: "image", name: "抖音详情页图", description: "竖版详情拼图，强调卖点与规格。", defaults: { imageType: "详情页图", imageSize: "9:16 竖版", imageCount: 4 }, promptHint: "分屏展示卖点、规格与使用场景。" },
+  { id: "xhs-image-main", platform: "小红书", kind: "image", name: "小红书 3:4 主图", description: "种草笔记首图比例。", defaults: { imageType: "商品主图", imageSize: "3:4 小红书", imageCount: 3 }, promptHint: "生活方式场景，柔和光线。" },
+  { id: "tb-image-detail", platform: "淘宝", kind: "image", name: "淘宝详情图组", description: "主图+详情多图。", defaults: { imageType: "详情页图", imageSize: "1:1 平台主图", imageCount: 4 }, promptHint: "信息密度高，突出规格。" },
+  { id: "dy-copy-detail", platform: "抖音", kind: "copy", name: "抖店详情文案", description: "商品详情页长文案。", defaults: { copyType: "详情文案", versionCount: 2 }, promptHint: "口语化、场景化。" },
+  { id: "dy-copy-publish", platform: "抖音", kind: "copy", name: "抖音发布文案", description: "短视频/图文发布文案。", defaults: { copyType: "发布文案", versionCount: 3 }, promptHint: "前 3 秒钩子 + 行动号召。" },
+  { id: "dy-video-show", platform: "抖音", kind: "video", name: "抖音商品展示 9:16", description: "动作迁移视频生成。", defaults: { videoType: "商品展示视频", videoRatio: "9:16 竖版", videoDuration: "7 秒" }, promptHint: "" },
+  { id: "xhs-video-show", platform: "小红书", kind: "video", name: "小红书商品展示 3:4", description: "动作迁移视频生成。", defaults: { videoType: "商品展示视频", videoRatio: "3:4 小红书", videoDuration: "7 秒" }, promptHint: "" },
+];
+
+let generationTemplates = LOCAL_GENERATION_TEMPLATES;
 
 let workflows = [
   { productId: "P1001", product: "智能恒温杯", node: "视频成品待发布", status: "待发布", progress: 68 },
@@ -202,18 +239,55 @@ let logs = [
   { productId: "P1003", text: "库存为 0，系统暂停 3 个待发布任务", time: "11:42", action: "general" },
 ];
 
+const PLATFORM_WORKFLOW_OPTIONS = ["抖音", "小红书", "淘宝"];
+
+const PLATFORM_CHAINS = {
+  抖音: [
+    { key: "product_info", label: "商品资料", type: "manual" },
+    { key: "generate_image", label: "图片生成", type: "generate", kind: "image" },
+    { key: "generate_copy", label: "商品文案", type: "generate", kind: "copy" },
+    { key: "generate_video", label: "视频生成", type: "generate", kind: "video" },
+    { key: "generate_video_copy", label: "视频文案", type: "generate", kind: "copy" },
+    { key: "wait_confirm", label: "预览确认", type: "manual" },
+    { key: "listing_confirm", label: "主店上架确认", type: "manual" },
+    { key: "create_listing", label: "主店上架", type: "listing" },
+    { key: "observe_authorized", label: "授权号橱窗同步", type: "observe" },
+    { key: "observe_alliance", label: "精选联盟推广", type: "observe" },
+    { key: "create_publish", label: "矩阵内容发布", type: "publish", multiAccount: true },
+    { key: "data_done", label: "数据回流", type: "observe" },
+  ],
+  小红书: [
+    { key: "product_info", label: "商品资料", type: "manual" },
+    { key: "generate_image", label: "图片生成", type: "generate", kind: "image" },
+    { key: "generate_copy", label: "商品文案", type: "generate", kind: "copy" },
+    { key: "generate_video", label: "视频生成", type: "generate", kind: "video" },
+    { key: "generate_video_copy", label: "发布文案", type: "generate", kind: "copy" },
+    { key: "wait_confirm", label: "预览确认", type: "manual" },
+    { key: "create_listing", label: "店铺上架", type: "listing" },
+    { key: "create_publish", label: "单账号发布", type: "publish", multiAccount: false },
+    { key: "data_done", label: "数据回流", type: "observe" },
+  ],
+  淘宝: [
+    { key: "product_info", label: "商品资料", type: "manual" },
+    { key: "generate_image", label: "主图与详情图", type: "generate", kind: "image" },
+    { key: "generate_copy", label: "标题与详情文案", type: "generate", kind: "copy" },
+    { key: "wait_confirm", label: "预览确认", type: "manual" },
+    { key: "create_listing", label: "店铺上架", type: "listing" },
+    { key: "data_done", label: "数据回流", type: "observe" },
+  ],
+};
+
 const titles = {
   dashboard: "今日工作台",
-  products: "商品运营台",
-  generator: "AI 生成工作台",
-  tasks: "生成任务",
+  workflow: "平台工作流",
+  products: "商品管理",
   publish: "发布任务",
-  assets: "成品库",
+  materials: "素材库",
   accounts: "平台账号",
-  inventory: "库存中心",
-  data: "数据中心",
-  workflows: "自动化流程",
+  inventory: "库存",
 };
+
+const REMOVED_VIEWS = new Set(["generator", "tasks", "assets", "data", "workflows"]);
 
 const GENERATION_KIND_LABEL = { image: "图片", copy: "文案", video: "视频" };
 const ACTIVE_TASK_STATUSES = ["待执行", "执行中"];
@@ -224,13 +298,26 @@ const topActions = document.querySelector("#topActions");
 const toast = document.querySelector("#toast");
 
 function getDataState() {
-  return { products, workflows, workflowInstances, assets, generationTasks, listingTasks, publishTasks, accounts, platformFailures, logs };
+  return {
+    products,
+    workflows,
+    workflowInstances,
+    platformWorkflows,
+    assets,
+    generationTasks,
+    listingTasks,
+    publishTasks,
+    accounts,
+    platformFailures,
+    logs,
+  };
 }
 
 function applyDataState(data) {
   products = Array.isArray(data.products) ? data.products : products;
   workflows = Array.isArray(data.workflows) ? data.workflows : workflows;
   workflowInstances = Array.isArray(data.workflowInstances) ? data.workflowInstances : workflowInstances;
+  platformWorkflows = Array.isArray(data.platformWorkflows) ? data.platformWorkflows : platformWorkflows;
   assets = Array.isArray(data.assets) ? data.assets : assets;
   generationTasks = Array.isArray(data.generationTasks) ? data.generationTasks : generationTasks;
   listingTasks = Array.isArray(data.listingTasks) ? data.listingTasks : listingTasks;
@@ -238,8 +325,12 @@ function applyDataState(data) {
   accounts = Array.isArray(data.accounts) ? data.accounts : accounts;
   platformFailures = Array.isArray(data.platformFailures) ? data.platformFailures : platformFailures;
   logs = Array.isArray(data.logs) ? data.logs : logs;
+  if (Array.isArray(data.modelImages)) state.modelImages = data.modelImages;
+  if (Array.isArray(data.templateVideos)) state.templateVideos = data.templateVideos;
 
-  if (!productById(state.selectedProductId)) {
+  cleanupStaleGenerationTasks();
+
+  if (!productById(state.selectedProductId) && state.view !== "workflow") {
     state.selectedProductId = products[0]?.id || "";
   }
   if (!assetById(state.selectedAssetId)) {
@@ -249,6 +340,43 @@ function applyDataState(data) {
     state.selectedTaskId = generationTasks[0]?.id || "";
   }
   syncTaskPolling();
+}
+
+function cleanupStaleGenerationTasks() {
+  function getActiveNode(inst) {
+    return (inst.nodes || []).find((n) => !["已成功", "已跳过"].includes(n.status)) || null;
+  }
+  function productKindStatus(productId, kind) {
+    const p = productById(productId);
+    if (!p) return "";
+    return p[kindToStatusField(kind)] || "";
+  }
+  const activeKinds = new Set();
+  platformWorkflows.forEach((pw) => {
+    const node = getActiveNode(pw);
+    if (node && node.type === "generate" && node.status !== "已成功") {
+      activeKinds.add(`${pw.productId}:${node.kind}`);
+      if (productKindStatus(pw.productId, node.kind) !== "生成中") {
+        activeKinds.delete(`${pw.productId}:${node.kind}`);
+      }
+    }
+  });
+  workflowInstances.forEach((inst) => {
+    const node = getActiveNode(inst);
+    if (node && node.type === "generate" && node.status !== "已成功") {
+      activeKinds.add(`${inst.productId}:${node.kind}`);
+      if (productKindStatus(inst.productId, node.kind) !== "生成中") {
+        activeKinds.delete(`${inst.productId}:${node.kind}`);
+      }
+    }
+  });
+  generationTasks.forEach((task) => {
+    if (!ACTIVE_TASK_STATUSES.includes(task.status)) return;
+    const key = `${task.productId}:${task.kind}`;
+    if (!activeKinds.has(key)) {
+      task.status = "已取消";
+    }
+  });
 }
 
 async function loadRemoteState(options = {}) {
@@ -295,6 +423,63 @@ async function loadProductStrategy(productId) {
   } catch (error) {
     state.productStrategy = buildLocalProductStrategy(productId);
   }
+}
+
+async function loadGenerationTemplates() {
+  if (!API_ENABLED) {
+    generationTemplates = LOCAL_GENERATION_TEMPLATES;
+    return;
+  }
+  try {
+    const response = await fetch("/api/generation-templates", { cache: "no-store" });
+    if (!response.ok) throw new Error("Failed");
+    const data = await response.json();
+    if (Array.isArray(data.templates) && data.templates.length) {
+      generationTemplates = data.templates;
+    }
+  } catch (error) {
+    generationTemplates = LOCAL_GENERATION_TEMPLATES;
+  }
+}
+
+function filterGenerationTemplates(platform, kind) {
+  return generationTemplates.filter((item) => {
+    if (platform && item.platform !== platform) return false;
+    if (kind && item.kind !== kind) return false;
+    return true;
+  });
+}
+
+function pickDefaultGenerationTemplate(platform, kind, nodeParams = {}) {
+  const list = filterGenerationTemplates(platform, kind);
+  if (!list.length) return null;
+  if (kind === "copy" && nodeParams.copyType) {
+    const match = list.find((item) => item.defaults?.copyType === nodeParams.copyType);
+    if (match) return match;
+  }
+  if (kind === "image" && nodeParams.imageType) {
+    const match = list.find((item) => item.defaults?.imageType === nodeParams.imageType);
+    if (match) return match;
+  }
+  return list[0];
+}
+
+function renderGenerationTemplatePicker(platform, kind, nodeParams = {}, selectedId = "") {
+  const templates = filterGenerationTemplates(platform, kind);
+  if (!templates.length) return "";
+  const remembered = getLastTemplateId(platform, kind);
+  const fallback = pickDefaultGenerationTemplate(platform, kind, nodeParams);
+  let activeId = selectedId || remembered || state.selectedGenerationTemplateId || fallback?.id || templates[0]?.id || "";
+  if (!templates.some((item) => item.id === activeId)) {
+    activeId = fallback?.id || templates[0]?.id || "";
+  }
+  const active = templates.find((item) => item.id === activeId) || templates[0] || null;
+  return `<label class="field field-wide"><span>生成模板</span><select name="generationTemplateId" data-action="generation-template-change" data-platform="${escapeHtml(platform || "")}" data-kind="${escapeHtml(kind || "")}">${templates
+    .map(
+      (item) =>
+        `<option value="${item.id}" ${item.id === activeId ? "selected" : ""}>${escapeHtml(item.name)}</option>`
+    )
+    .join("")}</select><p class="meta">${escapeHtml(active?.description || "")}</p></label>`;
 }
 
 async function loadStrategySummary() {
@@ -535,7 +720,7 @@ async function runApiAction(path, payload) {
     if (result.data) applyDataState(result.data);
     return true;
   } catch (error) {
-    showToast("接口调用失败，已保留当前页面状态。");
+    showToast(error.message ? `接口调用失败：${error.message}` : "接口调用失败，已保留当前页面状态。");
     return false;
   }
 }
@@ -546,6 +731,69 @@ function escapeHtml(text) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function persistGenPresets() {
+  localStorage.setItem("yunying_genPresets", JSON.stringify(state.generationPresets));
+}
+
+function persistLastTplSelections() {
+  localStorage.setItem("yunying_lastTplSelections", JSON.stringify(state.lastTemplateSelections));
+}
+
+function saveGenerationPreset(name, platform, kind, templateId, params) {
+  const preset = {
+    id: "preset_" + Date.now(),
+    name,
+    platform,
+    kind,
+    templateId,
+    params: { ...params },
+  };
+  state.generationPresets.unshift(preset);
+  persistGenPresets();
+  return preset;
+}
+
+function deleteGenerationPreset(id) {
+  state.generationPresets = state.generationPresets.filter((item) => item.id !== id);
+  persistGenPresets();
+}
+
+function getPresetsForNode(platform, kind) {
+  return state.generationPresets.filter(
+    (item) => item.platform === platform && item.kind === kind
+  );
+}
+
+function getCompletedAssetsForNode(product, node) {
+  return getProductAssets(product.id).filter(
+    (item) => item.kind === node.kind && item.status === "已生成"
+  );
+}
+
+function getActiveTaskForNode(product, node) {
+  return getProductTasks(product.id).find(
+    (item) => item.kind === node.kind && ACTIVE_TASK_STATUSES.includes(item.status)
+  );
+}
+
+function getFailedTaskForNode(product, node) {
+  return getProductTasks(product.id).find(
+    (item) => item.kind === node.kind && item.status === "失败"
+  );
+}
+
+function getLastTemplateId(platform, kind) {
+  const key = platform + ":" + kind;
+  return state.lastTemplateSelections[key] || "";
+}
+
+function setLastTemplateId(platform, kind, templateId) {
+  if (!templateId) return;
+  const key = platform + ":" + kind;
+  state.lastTemplateSelections[key] = templateId;
+  persistLastTplSelections();
 }
 
 function listToInput(list) {
@@ -560,7 +808,8 @@ function inputToList(value) {
 }
 
 function productById(id) {
-  return products.find((item) => item.id === id) || products[0];
+  if (!id) return null;
+  return products.find((item) => item.id === id) || null;
 }
 
 function assetById(id) {
@@ -585,11 +834,22 @@ function syncTaskPolling() {
   else stopTaskPolling();
 }
 
+function saveGeneratorFormDraft() {
+  const form = document.getElementById("generatorForm");
+  if (!form) return;
+  const data = new FormData(form);
+  state.generatorFormDraft = Object.fromEntries(data.entries());
+  state.generatorFormDraft.extraPrompt = String(data.get("extraPrompt") || "");
+}
+
 function startTaskPolling() {
   if (pollTimer) return;
   pollTimer = window.setInterval(async () => {
     await loadRemoteState({ silent: true });
-    render();
+    if (!state.workflowLaunchOpen && !state.selectedProductId) return;
+    if (!state.workflowLaunchOpen && hasActiveGenerationTasks()) {
+      if (state.view === "tasks") render();
+    }
     if (!hasActiveGenerationTasks() && !hasActiveWorkflows()) stopTaskPolling();
   }, 2000);
 }
@@ -645,7 +905,14 @@ function defaultGenerationParams(kind, product) {
   return {
     videoType: "商品展示视频",
     videoRatio: "9:16 竖版",
-    videoDuration: "15 秒",
+    videoDuration: "7 秒",
+    seconds: "7",
+    frameRate: "25",
+    videoWidth: "544",
+    videoHeight: "960",
+    mode: "1",
+    expressionIntensity: "1.0",
+    ruKilnAmplitude: "0.2",
     extraPrompt: "",
   };
 }
@@ -891,10 +1158,347 @@ async function downloadExportPack(productId) {
 
 function openProductDesk(productId, options = {}) {
   state.selectedProductId = productId;
+  state.workflowLaunchOpen = false;
+  state.productReferenceUrls = [];
   if (options.assetId) state.selectedAssetId = options.assetId;
   if (options.taskId) state.selectedTaskId = options.taskId;
-  if (options.workflowId) state.selectedWorkflowId = options.workflowId;
-  setView("products");
+  if (options.platformWorkflowId) state.selectedPlatformWorkflowId = options.platformWorkflowId;
+  if (options.platform) state.workflowPlatformTab = options.platform;
+  if (API_ENABLED) {
+    Promise.all([loadProductImages(productId), loadGeneratedModelImages()]).then(() => {
+      if (state.selectedProductId === productId && state.view === "workflow") renderWorkflow();
+    });
+  }
+  setView("workflow");
+}
+
+function openPlatformWorkflow(productId, platformWorkflowId, platform) {
+  openProductDesk(productId, { platformWorkflowId, platform });
+}
+
+function getProductPlatformWorkflowsLocal(productId) {
+  return platformWorkflows.filter((item) => item.productId === productId);
+}
+
+function getActivePlatformWorkflow() {
+  const list = getProductPlatformWorkflowsLocal(state.selectedProductId);
+  if (state.selectedPlatformWorkflowId) {
+    return list.find((item) => item.id === state.selectedPlatformWorkflowId) || null;
+  }
+  return list.find((item) => item.platform === state.workflowPlatformTab) || null;
+}
+
+function getActivePwNode(pw) {
+  if (!pw) return null;
+  return pw.nodes.find((node) => !["已成功", "已跳过"].includes(node.status)) || null;
+}
+
+function renderPlatformWorkflowNodeList(pw) {
+  return `<ol class="pw-node-list">${pw.nodes
+    .map((node) => {
+      const active = !["已成功", "已跳过"].includes(node.status) && node.id === getActivePwNode(pw)?.id;
+      const cls =
+        node.status === "已成功" || node.status === "已跳过"
+          ? "done"
+          : node.status === "失败"
+            ? "failed"
+            : active
+              ? "active"
+              : "";
+      return `<li class="pw-node ${cls}"><span class="pw-node-index">${node.id.replace("n", "")}</span><div><strong>${escapeHtml(node.label)}</strong><span class="meta">${escapeHtml(node.status)}</span></div></li>`;
+    })
+    .join("")}</ol>`;
+}
+
+function renderPlatformWorkflowNodeActions(pw, node) {
+  if (!node) return `<p class="meta">该链路已完成。</p>`;
+  const product = productById(pw.productId);
+  const actions = [];
+  let body = "";
+  if (node.type === "manual" && node.key === "product_info") {
+    body = `<p>确认商品资料无误后点击确认继续。</p><div class="info-grid">${infoBox("名称", product.name)}${infoBox("库存", product.stock)}${infoBox("平台", (product.platforms || []).join("、"))}</div><button class="ghost-btn" type="button" data-action="toggle-product-edit">编辑资料</button>`;
+  } else if (node.type === "manual") {
+    body = `${renderDeskAssetPanel(product)}`;
+  } else if (node.type === "generate") {
+    state.activeGenerator = node.kind;
+    const existingAssets = getCompletedAssetsForNode(product, node);
+    const activeTask = getActiveTaskForNode(product, node);
+    const failedTask = getFailedTaskForNode(product, node);
+    if (existingAssets.length > 0 && node.status !== "执行中") {
+      body = `<p>「${escapeHtml(node.label)}」已完成，在下方预览并确认。</p>${renderNodeAssetPreviewInline(product, node, pw, existingAssets)}`;
+    } else if (activeTask) {
+      body = `<p>「${escapeHtml(node.label)}」执行中，完成后会自动显示成品。</p>${renderInlineGenerator(product, { platform: pw.platform, hideTabs: true, nodeParams: node.params || {} })}<div class="panel" style="margin-top:12px;border-color:#93c5fd;background:#eff6ff"><div class="panel-header"><div><h4>${escapeHtml(activeTask.label)}</h4><p>${activeTask.updatedAt}</p></div>${statusPill(activeTask.status)}</div><div class="progress"><span style="--value:65%"></span></div></div>`;
+    } else {
+      body = `<p>选择模板与参数，点击开始生成。</p>${renderNodeGeneratorForm(product, node, pw)}`;
+    }
+  } else if (node.type === "listing") {
+    const listing = listingTasks.find((item) => item.id === node.taskId) || getProductListingTasks(product.id).slice(0, 1)[0];
+    const isAutoCreated = listing && listing.id !== node.taskId;
+    body = `<p>确认上架信息，调用${pw.platform}平台上架接口。</p>${
+      listing
+        ? `<div class="info-grid">${infoBox("状态", listing.status)}${infoBox("完整度", `${listing.completeness || 0}%`)}${infoBox("模式", listing.platformMode || listing.mode || "半自动")}</div>${listing.failureReason ? `<p class="meta task-error">${escapeHtml(listing.failureReason)}</p>` : ""}${isAutoCreated ? `<p class="meta" style="color:var(--teal)">✅ 生成已完成，上架草稿已自动创建。</p>` : ""}`
+        : "<p class='meta'>素材生成完成后，上架草稿会自动创建。</p>"
+    }`;
+    if (listing && ["草稿中", "待补充", "失败"].includes(listing.status)) {
+      actions.push(`<button class="primary-btn" type="button" data-action="execute-listing" data-id="${listing.id}">执行上架 API</button>`);
+    }
+    if (listing) {
+      actions.push(`<button class="ghost-btn" type="button" data-action="export-listing" data-id="${listing.id}">导出上架包</button>`);
+    }
+  } else if (node.type === "publish") {
+    const tasks = (node.taskIds || []).map((id) => publishTasks.find((item) => item.id === id)).filter(Boolean);
+    body = `<p>${pw.platform === "抖音" ? "矩阵：授权号 + 达人号" : ""}选择内容账号并执行发布。</p><div class="list compact-list">${
+      tasks.length
+        ? tasks
+            .map(
+              (task) =>
+                `<article class="task-item compact"><div><div class="task-title">${escapeHtml(task.account)}</div><div class="meta">${escapeHtml(task.assetName || "待关联成品")} / ${escapeHtml(task.time)}</div></div>${statusPill(task.status)}</article>`
+            )
+            .join("")
+        : "<p class='meta'>点击「执行矩阵发布」创建并调用各账号发布接口。</p>"
+    }</div>`;
+    if (tasks.some((item) => ["待发布", "失败"].includes(item.status))) {
+      actions.push(`<button class="primary-btn" type="button" data-action="pw-execute-publish" data-id="${pw.id}">执行矩阵发布</button>`);
+    }
+  } else if (node.type === "observe") {
+    body = `<p>${escapeHtml(node.hint || "平台侧自动步骤，确认完成后打勾。")}</p><div class="info-grid">${infoBox("同步状态", node.observeStatus || "未检查")}${infoBox("平台商品", node.platformProductId || "—")}</div>${node.observeDetail ? `<p class="meta">${escapeHtml(node.observeDetail)}</p>` : ""}`;
+    actions.push(`<button class="ghost-btn" type="button" data-action="pw-observe-check" data-id="${pw.id}">检查同步状态</button>`);
+  }
+  if (node.status === "等待确认") {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-confirm" data-id="${pw.id}">确认并继续</button>`);
+    actions.push(`<button class="ghost-btn" type="button" data-action="pw-skip" data-id="${pw.id}">跳过</button>`);
+  } else if (node.status === "失败") {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-retry" data-id="${pw.id}">重试节点</button>`);
+  } else if (node.status === "执行中" && node.type === "generate") {
+    actions.push(`<button class="ghost-btn" type="button" data-action="pw-advance" data-id="${pw.id}">检查进度</button>`);
+  } else if (node.status === "待执行" && !["listing", "publish", "generate"].includes(node.type)) {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-advance" data-id="${pw.id}">执行本节点</button>`);
+  } else if (node.status === "待执行" && node.type === "listing") {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-advance" data-id="${pw.id}">执行上架</button>`);
+  } else if (node.status === "待执行" && node.type === "publish") {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-advance" data-id="${pw.id}">创建并发布</button>`);
+  } else if (node.status === "待执行" && node.type === "observe") {
+    actions.push(`<button class="primary-btn" type="button" data-action="pw-advance" data-id="${pw.id}">开始观测</button>`);
+  }
+  return `${body}<div class="button-row" style="margin-top:14px">${actions.join("")}</div>`;
+}
+
+function renderWorkflowLaunchView() {
+  const selectedPlatforms = state.launchPlatforms || [];
+  return `<section class="workflow-launch-layout"><aside class="panel launch-col-left"><div class="panel-header"><div><h3>1. 上传商品原图</h3><p>支持拖拽上传，可后续补充</p></div></div><div class="upload-zone" id="uploadZone" data-action="trigger-upload"><input type="file" id="fileInput" accept="image/*" multiple style="display:none"><div class="upload-icon">📷</div><p><strong>点击或拖拽图片到此处</strong></p><p class="meta">支持 JPG、PNG，最多 10 张</p><div class="upload-preview" id="uploadPreview"></div></div></aside><section class="panel launch-col-main"><div class="panel-header"><div><h3>2. 填写商品信息</h3><p>基础信息必填，其他可后续完善</p></div></div><form id="launchProductForm" class="launch-form">${renderLaunchFormFields()}</form></section><aside class="panel launch-col-right"><div class="panel-header"><div><h3>3. 选择平台并预览</h3><p>勾选平台查看工作流节点</p></div></div>${renderLaunchPlatformPanel(selectedPlatforms)}<div class="launch-summary"><span class="meta">已选择 <strong id="selectedCount">${selectedPlatforms.length}</strong> 个平台</span><button class="primary-btn" style="width:100%;margin-top:12px" type="button" data-action="submit-launch-form" ${selectedPlatforms.length === 0 ? "disabled" : ""}>创建商品并启动工作流</button></div></aside></section>`;
+}
+
+function renderLaunchFormFields() {
+  const draft = state.launchDraft || {};
+  const category = draft.category || CATEGORY_OPTIONS[0];
+  return `
+    <div class="form-grid">
+      <label class="field field-wide"><span>商品名称 *</span><input name="name" data-launch-field="name" value="${escapeHtml(draft.name || "")}" placeholder="例如：智能恒温杯" required /></label>
+      <label class="field"><span>类目</span><select name="category" data-launch-field="category">${CATEGORY_OPTIONS.map((item) => `<option value="${item}" ${category === item ? "selected" : ""}>${item}</option>`).join("")}</select></label>
+      <label class="field"><span>价格（元）</span><input name="price" data-launch-field="price" type="number" min="0" step="0.01" value="${escapeHtml(draft.price || "")}" placeholder="99" /></label>
+      <label class="field"><span>库存</span><input name="stock" data-launch-field="stock" type="number" min="0" value="${escapeHtml(draft.stock || "")}" placeholder="100" /></label>
+      <label class="field field-wide"><span>核心卖点</span><textarea name="sellingPoints" data-launch-field="sellingPoints" placeholder="例如：恒温显示、长效保温、车载适配" rows="2">${escapeHtml(draft.sellingPoints || "")}</textarea></label>
+      <label class="field field-wide"><span>规格信息</span><textarea name="specs" data-launch-field="specs" placeholder="例如：450ml / 白色、黑色 / USB充电" rows="2">${escapeHtml(draft.specs || "")}</textarea></label>
+    </div>
+  `;
+}
+
+function renderLaunchPlatformPanel(selectedPlatforms) {
+  return `<div class="platform-selector">${PLATFORM_WORKFLOW_OPTIONS.map((platform) => {
+    const selected = selectedPlatforms.includes(platform);
+    const chain = PLATFORM_CHAINS[platform] || [];
+    return `<div class="platform-option ${selected ? "selected" : ""}" data-platform="${platform}"><label class="platform-checkbox"><input type="checkbox" value="${platform}" ${selected ? "checked" : ""} data-action="toggle-launch-platform"><strong>${escapeHtml(platform)}</strong><span class="platform-step-count">${chain.length} 个节点</span></label><div class="platform-nodes">${chain.map((node, i) => `<span class="platform-node-tag">${i + 1}. ${escapeHtml(node.label)}</span>`).join("")}</div></div>`;
+  }).join("")}</div>`;
+}
+
+function handleFileUpload(files) {
+  if (!files || files.length === 0) return;
+  Array.from(files).slice(0, 10).forEach((file) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      state.uploadedImages.push({ src: e.target.result, name: file.name });
+      renderUploadPreview();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function setupDragDrop() {
+  const uploadZone = document.getElementById("uploadZone");
+  if (!uploadZone) return;
+  uploadZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    uploadZone.classList.add("drag-over");
+  });
+  uploadZone.addEventListener("dragleave", () => {
+    uploadZone.classList.remove("drag-over");
+  });
+  uploadZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove("drag-over");
+    handleFileUpload(e.dataTransfer.files);
+  });
+}
+
+function renderUploadPreview() {
+  const preview = document.getElementById("uploadPreview");
+  if (!preview) return;
+  preview.innerHTML = state.uploadedImages.map((img, i) => `<div class="upload-preview-item"><img src="${img.src}" alt="上传图片 ${i + 1}"><button class="remove-btn" data-action="remove-upload-image" data-index="${i}">×</button></div>`).join("");
+  const uploadZone = document.getElementById("uploadZone");
+  if (uploadZone) {
+    uploadZone.classList.toggle("has-images", state.uploadedImages.length > 0);
+  }
+}
+
+function syncLaunchDraftFromForm() {
+  const form = document.getElementById("launchProductForm");
+  if (!form) return;
+  const data = new FormData(form);
+  state.launchDraft = {
+    name: String(data.get("name") || ""),
+    category: String(data.get("category") || ""),
+    price: String(data.get("price") || ""),
+    stock: String(data.get("stock") || ""),
+    sellingPoints: String(data.get("sellingPoints") || ""),
+    specs: String(data.get("specs") || ""),
+  };
+}
+
+async function handleLaunchFormSubmit() {
+  syncLaunchDraftFromForm();
+  const form = document.getElementById("launchProductForm");
+  if (!form) return;
+  const formData = new FormData(form);
+  const productData = {
+    name: String(formData.get("name") || "").trim(),
+    category: String(formData.get("category") || "待识别"),
+    price: Number(formData.get("price")) || 0,
+    stock: Number(formData.get("stock")) || 0,
+    sellingPoints: String(formData.get("sellingPoints") || "").trim(),
+    specs: String(formData.get("specs") || "").trim(),
+    platforms: state.launchPlatforms,
+  };
+  if (!productData.name) {
+    showToast("请输入商品名称");
+    return;
+  }
+  if (state.launchPlatforms.length === 0) {
+    showToast("请至少选择一个平台");
+    return;
+  }
+  if (API_ENABLED) {
+    const platformCount = state.launchPlatforms.length;
+    const result = await runApiAction("/api/actions/products", { ...productData, startPlatformWorkflows: true, platforms: state.launchPlatforms });
+    if (result) {
+      const data = await (await fetch("/api/state")).json();
+      applyDataState(data);
+      const newProduct = data.products.find((p) => p.name === productData.name);
+      if (newProduct) {
+        state.selectedProductId = newProduct.id;
+        await uploadProductImages(newProduct.id);
+        await loadProductImages(newProduct.id);
+        state.workflowLaunchOpen = false;
+        state.launchPlatforms = [];
+        state.uploadedImages = [];
+        showToast(`商品「${productData.name}」已创建，已启动 ${platformCount} 条平台工作流`);
+        render();
+      }
+    }
+  } else {
+    const platformCount = state.launchPlatforms.length;
+    const product = {
+      id: `P${String(products.length + 1).padStart(4, "0")}`,
+      ...productData,
+      code: `SKU-DRAFT-${products.length + 1}`,
+      platforms: state.launchPlatforms,
+      accounts: state.launchPlatforms.map(() => "未绑定"),
+      status: "待生成",
+      imageStatus: "未生成",
+      copyStatus: "未生成",
+      videoStatus: "未生成",
+      listingStatus: "未上架",
+      publishStatus: "未发布",
+      progress: 18,
+      updatedAt: "刚刚",
+      colors: ["#e2e8f0", "#93c5fd"],
+    };
+    products.unshift(product);
+    logs.unshift({ productId: product.id, text: `创建商品「${product.name}」`, time: "刚刚", action: "general" });
+    state.launchPlatforms.forEach((platform) => {
+      const chain = PLATFORM_CHAINS[platform] || [];
+      const pw = {
+        id: `PW${String(platformWorkflows.length + 1).padStart(3, "0")}`,
+        productId: product.id,
+        productName: product.name,
+        platform,
+        template: `${platform}链路`,
+        status: "执行中",
+        progress: 0,
+        nodes: chain.map((item, index) => ({
+          id: `n${index + 1}`,
+          key: item.key,
+          label: item.label,
+          type: item.type,
+          kind: item.kind || "",
+          hint: item.hint || "",
+          status: "待执行",
+        })),
+        createdAt: "刚刚",
+        updatedAt: "刚刚",
+      };
+      platformWorkflows.unshift(pw);
+    });
+    state.selectedProductId = product.id;
+    state.productImages = state.uploadedImages.map((img, i) => ({
+      id: `PI${String(i + 1).padStart(3, "0")}`,
+      productId: product.id,
+      name: img.name || `原图 ${i + 1}`,
+      url: img.src,
+      addedAt: "刚刚",
+    }));
+    state.workflowLaunchOpen = false;
+    state.launchPlatforms = [];
+    state.uploadedImages = [];
+    showToast(`商品「${product.name}」已创建，已启动 ${platformCount} 条平台工作流`);
+    render();
+  }
+}
+
+function renderWorkflow() {
+  if (state.workflowLaunchOpen || !products.length) {
+    root.innerHTML = renderWorkflowLaunchView();
+    setupDragDrop();
+    return;
+  }
+  const product = productById(state.selectedProductId);
+  if (!product) {
+    root.innerHTML = renderWorkflowLaunchView();
+    return;
+  }
+  const pws = getProductPlatformWorkflowsLocal(product.id);
+  if (!state.workflowPlatformTab && pws[0]) state.workflowPlatformTab = pws[0].platform;
+  const pw = getActivePlatformWorkflow();
+  if (pw) state.selectedPlatformWorkflowId = pw.id;
+
+  const platformTabs = PLATFORM_WORKFLOW_OPTIONS.map((platform) => {
+    const inst = pws.find((item) => item.platform === platform);
+    const label = inst ? `${platform} ${inst.progress || 0}%` : platform;
+    return `<button type="button" class="chip-btn ${state.workflowPlatformTab === platform ? "active" : ""}" data-action="select-pw-platform" data-platform="${platform}">${escapeHtml(label)}</button>`;
+  }).join("");
+
+  const main =
+    pw ?
+      `<section class="platform-workflow-layout"><aside class="panel pw-col-nodes"><div class="panel-header"><div><h3>${escapeHtml(pw.platform)} 链路</h3><p>${escapeHtml(pw.template)} · ${pw.progress || 0}%</p></div>${statusPill(pw.status)}</div>${renderPlatformWorkflowNodeList(pw)}</aside><section class="panel pw-col-main"><div class="panel-header"><div><h3>当前节点</h3><p>${escapeHtml(getActivePwNode(pw)?.label || "已完成")}</p></div></div>${renderPlatformWorkflowNodeActions(pw, getActivePwNode(pw))}</section><aside class="panel pw-col-side">${renderWorkflowProductInfo(product)}</aside></section>`
+    : `<section class="panel empty-state"><h3>尚未启动 ${escapeHtml(state.workflowPlatformTab)} 链路</h3><p class="meta">创建商品时可勾选平台；也可在此手动启动。</p><button class="primary-btn" type="button" data-action="start-platform-workflow" data-platform="${escapeHtml(state.workflowPlatformTab)}">启动 ${escapeHtml(state.workflowPlatformTab)} 工作流</button></section>`;
+
+  const productLogs = logs.filter((item) => item.productId === product.id).slice(0, 5);
+  const metaBlock =
+    state.productEditing || state.productDeskExpanded
+      ? `<form id="editProductForm" class="product-form">${renderProductFormFields(productToFormValues(product), "edit")}<div class="button-row"><button class="primary-btn" type="submit">保存资料</button><button class="ghost-btn" type="button" data-action="toggle-product-edit">取消</button></div></form>`
+      : `<button class="ghost-btn" type="button" data-action="toggle-product-edit">编辑商品资料</button>`;
+
+  root.innerHTML = `<section class="panel desk-header-panel"><div class="panel-header"><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.code)} / 库存 ${product.stock}</p></div>${statusPill(product.status)}</div>${renderProductPicker()}<div class="filter-row">${platformTabs}</div></section>${renderNextBestAction(product)}${main}<section class="panel desk-meta-panel"><div class="panel-header"><div><h3>商品资料与日志</h3></div></div>${metaBlock}<div class="timeline" style="margin-top:12px">${productLogs.map(renderLog).join("") || "<p class='meta'>暂无</p>"}</div></section>`;
 }
 
 function getProductAssets(productId) {
@@ -988,32 +1592,34 @@ function buildInboxItems() {
         cta: "查看进度",
       });
     });
-  workflowInstances
+  platformWorkflows
     .filter((item) => item.status === "等待确认")
-    .forEach((wf) => {
+    .forEach((pw) => {
+      const node = pw.nodes?.find((n) => !["已成功", "已跳过"].includes(n.status));
       items.push({
-        id: `inbox-wf-${wf.id}`,
+        id: `inbox-pw-${pw.id}`,
         tone: "primary",
-        title: `${wf.productName}：半自动流程等待预览确认`,
-        meta: wf.id,
-        action: "open-product-desk",
-        productId: wf.productId,
-        workflowId: wf.id,
+        title: `${pw.productName} · ${pw.platform}：${node?.label || "待确认"}`,
+        meta: pw.template || pw.id,
+        action: "open-platform-workflow",
+        productId: pw.productId,
+        platformWorkflowId: pw.id,
         cta: "去确认",
       });
     });
-  workflowInstances
+  platformWorkflows
     .filter((item) => item.status === "失败")
-    .forEach((wf) => {
+    .forEach((pw) => {
+      const node = pw.nodes?.find((n) => n.status === "失败");
       items.push({
-        id: `inbox-wf-fail-${wf.id}`,
+        id: `inbox-pw-fail-${pw.id}`,
         tone: "danger",
-        title: `${wf.productName}：自动化流程失败`,
-        meta: wf.nodes.find((node) => node.status === "失败")?.error || wf.id,
-        action: "open-workflows",
-        productId: wf.productId,
-        workflowId: wf.id,
-        cta: "异常队列",
+        title: `${pw.productName} · ${pw.platform}：节点失败`,
+        meta: node?.error || pw.id,
+        action: "open-platform-workflow",
+        productId: pw.productId,
+        platformWorkflowId: pw.id,
+        cta: "去处理",
       });
     });
   publishTasks
@@ -1116,36 +1722,81 @@ function renderProductPicker() {
     .join("")}</div>`;
 }
 
-function renderInlineGenerator(product) {
+function renderInlineGenerator(product, options = {}) {
   const missing = countMissingMaterials(product);
+  const effectivePlatform = options.platform || product.platforms?.[0] || "";
+  const tabs =
+    options.hideTabs
+      ? ""
+      : `<div class="tabs">${[["image", "图片"], ["copy", "文案"], ["video", "视频"]]
+          .map(
+            ([key, label]) =>
+              `<button type="button" class="tab-btn ${state.activeGenerator === key ? "active" : ""}" data-action="generator-tab" data-tab="${key}">${label}</button>`
+          )
+          .join("")}</div>`;
+  const platformField = effectivePlatform
+    ? `<input type="hidden" name="platform" value="${escapeHtml(effectivePlatform)}" />`
+    : "";
+  const refImages = !options.hideTabs && (state.activeGenerator === "image" || state.activeGenerator === "video") ? renderProductReferenceImages(product.id, state.activeGenerator) : "";
   return `<div class="panel desk-panel"><div class="panel-header"><div><h3>生成素材</h3><p>在当前商品上直接生成，无需跳转。</p></div>${
-    missing
+    missing && !options.hideTabs
       ? `<button class="ghost-btn" type="button" data-action="fill-missing-materials" data-product="${product.id}">一键补全 ${missing} 项</button>`
       : ""
-  }</div>${renderMaterialChecklist(product)}<div class="tabs">${[["image", "图片"], ["copy", "文案"], ["video", "视频"]]
-    .map(
-      ([key, label]) =>
-        `<button type="button" class="tab-btn ${state.activeGenerator === key ? "active" : ""}" data-action="generator-tab" data-tab="${key}">${label}</button>`
-    )
-    .join("")}</div><form id="generatorForm" class="form-grid compact-form" data-action="stop-propagation">${renderGeneratorFields()}</form><div class="button-row"><button class="primary-btn" type="button" data-action="run-generator">开始生成</button></div><div class="list desk-task-list">${getProductTasks(product.id)
+  }</div>${options.hideTabs ? "" : renderMaterialChecklist(product)}${tabs}<form id="generatorForm" class="form-grid compact-form" data-action="stop-propagation">${platformField}${renderGeneratorFields({ ...options, platform: effectivePlatform, kind: options.kind || state.activeGenerator })}${refImages}</form><div class="button-row"><button class="primary-btn" type="button" data-action="run-generator">开始生成</button></div><div class="list desk-task-list">${getProductTasks(product.id)
     .slice(0, 5)
     .map(renderGenerationTaskRow)
     .join("") || "<p class='meta'>暂无本商品生成任务。</p>"}</div></div>`;
 }
 
+function renderNodeGeneratorForm(product, node, pw) {
+  const presets = getPresetsForNode(pw.platform, node.kind);
+  const presetOptions = presets.length
+    ? `<label class="field field-wide"><span>已保存预设</span><select name="presetSelect" data-action="apply-preset"><option value="">— 从预设加载 —</option>${presets
+        .map(
+          (item) =>
+            `<option value="${item.id}">${escapeHtml(item.name)}</option>`
+        )
+        .join("")}</select><button class="ghost-btn small-btn" type="button" data-action="open-preset-form" data-platform="${escapeHtml(pw.platform)}" data-kind="${node.kind}">管理预设</button></label>`
+    : "";
+  const refImages = (node.kind === "image" || node.kind === "video") ? renderProductReferenceImages(product.id, node.kind) : "";
+  return `<div class="panel desk-panel"><div class="panel-header"><div><h3>${escapeHtml(node.label)}</h3><p>选择模板并执行生成。</p></div></div>${presetOptions}<form id="generatorForm" class="form-grid compact-form" data-action="stop-propagation"><input type="hidden" name="platform" value="${escapeHtml(pw.platform)}" />${renderGeneratorFields({ platform: pw.platform, hideTabs: true, nodeParams: node.params || {}, kind: node.kind })}${refImages}</form><div class="button-row"><button class="primary-btn" type="button" data-action="run-generator">开始生成</button><button class="ghost-btn" type="button" data-action="save-preset" data-platform="${escapeHtml(pw.platform)}" data-kind="${node.kind}">保存为预设</button></div>${getProductTasks(product.id).filter((item) => item.kind === node.kind).slice(0, 3).map(renderGenerationTaskRow).join("") || ""}</div>`;
+}
+
+function renderNodeAssetPreviewInline(product, node, pw, assets) {
+  const kindLabel = { image: "图片", copy: "文案", video: "视频" }[node.kind] || node.kind;
+  const previews = assets.slice(0, 4).map((asset) => {
+    if (asset.kind === "image") {
+      return `<div class="asset-card" style="cursor:pointer" data-action="preview-asset" data-id="${asset.id}">${renderAssetImage(asset, product, "asset-preview")}<div><strong>${escapeHtml(asset.name)}</strong><div class="meta">${asset.version}</div></div></div>`;
+    }
+    if (asset.kind === "copy") {
+      return `<div class="copy-box" style="cursor:pointer;min-height:60px" data-action="preview-asset" data-id="${asset.id}">${escapeHtml((asset.content || "").slice(0, 120))}</div>`;
+    }
+    return `<div class="asset-card" style="cursor:pointer" data-action="preview-asset" data-id="${asset.id}">${renderAssetImage(asset, product, "asset-preview video")}<div><strong>${escapeHtml(asset.name)}</strong><div class="meta">${asset.duration || ""}</div></div></div>`;
+  }).join("");
+  const actions = `<div class="button-row"><button class="primary-btn" type="button" data-action="pw-advance" data-id="${pw.id}">确认并继续</button></div>`;
+  return `<div class="panel desk-panel" style="border-color:#86efac;background:#f7fff9"><div class="panel-header"><div><h4>${escapeHtml(kindLabel)}成品 · ${assets.length} 个</h4><p>确认后进入下一节点。</p></div></div><div class="asset-grid" style="grid-template-columns:repeat(${Math.min(assets.length < 3 ? assets.length : 3, 3)},minmax(0,1fr))">${previews}</div>${actions}</div>`;
+}
+
+function renderPresetManagerModal() {
+  const presets = state.generationPresets.filter(
+    (item) => item.platform === state.presetPlatform && item.kind === state.presetKind
+  );
+  return `<div class="modal-backdrop" id="presetManagerModal"><div class="modal-card"><div class="panel-header"><div><h2>管理预设</h2><p>${escapeHtml(state.presetPlatform)} / ${state.presetKind === "image" ? "图片" : state.presetKind === "copy" ? "文案" : "视频"}</p></div><button class="ghost-btn" type="button" data-action="close-preset-form">关闭</button></div><div class="list">${presets.length ? presets.map((item) => `<article class="task-item compact"><div><div class="task-title">${escapeHtml(item.name)}</div><div class="meta">${item.templateId ? `模板: ${item.templateId}` : ""}${item.params?.extraPrompt ? ` / ${escapeHtml(item.params.extraPrompt.slice(0, 60))}` : ""}</div></div><div class="inline-actions compact-actions"><button class="small-btn" type="button" data-action="load-preset" data-id="${item.id}">加载</button><button class="small-btn" type="button" data-action="delete-preset" data-id="${item.id}">删除</button></div></article>`).join("") : "<p class='meta'>暂无预设，在生成表单中保存。</p>"}</div></div></div>`;
+}
+
 function renderDeskAssetPanel(product) {
   const productAssets = getProductAssets(product.id);
   const selected = assetById(state.selectedAssetId);
-  const activeAsset = selected?.productId === product.id ? selected : productAssets.find((item) => item.status === "已生成") || productAssets[0];
+  const activeAsset = selected?.productId === product.id ? selected : productAssets.find((item) => item.status === "已生成" || item.publishQueued) || null;
   if (activeAsset && activeAsset.id !== state.selectedAssetId) state.selectedAssetId = activeAsset?.id || "";
-  return `<div class="panel desk-panel"><div class="panel-header"><div><h3>成品预览</h3><p>满意后可直接发布，不用去别的页面。</p></div><button class="ghost-btn" type="button" data-action="open-asset-form">登记成品</button></div><div class="filter-row">${[["all", "全部"], ["image", "图片"], ["video", "视频"], ["copy", "文案"], ["ready", "待发布"]]
+  return `<div class="panel desk-panel"><div class="panel-header"><div><h3>成品预览</h3><p>满意后可直接发布。</p></div><button class="ghost-btn" type="button" data-action="open-asset-form">登记成品</button></div><div class="filter-row">${[["all", "全部"], ["image", "图片"], ["video", "视频"], ["copy", "文案"], ["ready", "待发布"]]
     .map(
       ([key, label]) =>
         `<button type="button" class="chip-btn ${state.assetFilter === key ? "active" : ""}" data-action="filter-asset" data-filter="${key}">${label}</button>`
     )
-    .join("")}</div><div class="asset-grid desk-asset-grid">${filterAssetsList(productAssets).length ? filterAssetsList(productAssets).map((item) => renderAssetCard(item, true)).join("") : "<p class='meta'>还没有成品，可在左侧生成或登记。</p>"}</div>${
+    .join("")}</div><div class="asset-grid desk-asset-grid">${filterAssetsList(productAssets).length ? filterAssetsList(productAssets).map((item) => renderAssetCard(item, true)).join("") : "<p class='meta'>还没有成品，可在左侧生成或登记。"}</div>${
     activeAsset
-      ? `<div class="desk-preview-wrap">${renderAssetPreview(activeAsset, product)}<div class="button-row" style="margin-top:12px"><button class="primary-btn" type="button" data-action="publish-asset" data-id="${activeAsset.id}" ${activeAsset.status !== "已生成" ? "disabled" : ""}>确认发布</button>${activeAsset.kind === "copy" && activeAsset.status === "已生成" ? `<button class="ghost-btn" type="button" data-action="start-asset-edit">编辑文案</button>` : ""}${activeAsset.kind === "image" && activeAsset.status === "已生成" ? `<button class="ghost-btn" type="button" data-action="set-primary-image" data-id="${activeAsset.id}" ${activeAsset.isPrimary ? "disabled" : ""}>设为主图</button>` : ""}</div></div>`
+      ? `<div class="desk-preview-wrap">${renderAssetPreview(activeAsset, product)}<div class="button-row" style="margin-top:12px">${renderPublishAssetButton(activeAsset)}${activeAsset.kind === "copy" && activeAsset.status === "已生成" ? `<button class="ghost-btn" type="button" data-action="start-asset-edit">编辑文案</button>` : ""}${activeAsset.kind === "image" && activeAsset.status === "已生成" ? `<button class="ghost-btn" type="button" data-action="set-primary-image" data-id="${activeAsset.id}" ${activeAsset.isPrimary ? "disabled" : ""}>设为主图</button>` : ""}</div></div>`
       : ""
   }</div>`;
 }
@@ -1185,7 +1836,12 @@ function renderDeskWorkflowPanel(product) {
     const templateHint = workflowTemplates.find((item) => item.name === state.workflowTemplate);
     return `<div class="panel desk-panel workflow-panel"><div class="panel-header"><div><h3>自动化流程</h3><p>选择模板后一键启动，自动串联生成与发布。</p></div></div><label class="field"><span>流程模板</span><select id="deskWorkflowTemplate">${renderWorkflowTemplateOptions()}</select></label>${templateHint ? `<p class="meta">${templateHint.steps.join(" → ")}</p>` : ""}<div class="button-row" style="margin-top:12px"><button class="primary-btn" type="button" data-action="start-workflow" data-product="${product.id}">启动流程</button></div></div>`;
   }
-  return `<div class="panel desk-panel workflow-panel"><div class="panel-header"><div><h3>自动化流程 · ${escapeHtml(wf.template)}</h3><p>${escapeHtml(wf.id)} / ${statusPill(wf.status)} / 进度 ${computeWorkflowProgress(wf)}%</p></div><button class="ghost-btn" type="button" data-action="go" data-view="workflows">流程中心</button></div>${renderWorkflowNodes(wf)}${renderWorkflowActions(wf)}</div>`;
+  return `<div class="panel desk-panel workflow-panel"><div class="panel-header"><div><h3>自动化流程 · ${escapeHtml(wf.template)}</h3><p>${statusPill(wf.status)} / 进度 ${computeWorkflowProgress(wf)}%</p></div><button class="ghost-btn" type="button" data-action="go" data-view="workflows">流程中心</button></div>${renderWorkflowNodes(wf)}${renderWorkflowActions(wf)}</div>`;
+}
+
+function renderWorkflowProductInfo(product) {
+  const productLogs = logs.filter((item) => item.productId === product.id).slice(0, 8);
+  return `<div class="panel pw-side-panel"><div class="panel-header"><div><h3>商品信息</h3></div></div><div class="info-grid">${infoBox("名称", escapeHtml(product.name))}${infoBox("编号", escapeHtml(product.code))}${infoBox("价格", `¥${product.price}`)}${infoBox("库存", product.stock)}</div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span class="meta">素材状态</span><div style="display:flex;gap:8px;margin-top:8px">${statusPill(product.imageStatus, "图片")}${statusPill(product.copyStatus, "文案")}${statusPill(product.videoStatus, "视频")}</div></div><div style="margin-top:12px"><button class="ghost-btn" style="width:100%" type="button" data-action="toggle-product-edit">编辑商品资料</button></div><div class="panel-header" style="margin-top:16px"><div><h3>操作日志</h3></div></div>${productLogs.length ? `<div class="timeline">${productLogs.map(renderLog).join("")}</div>` : "<p class='meta'>暂无日志</p>"}</div>`;
 }
 
 function renderDeskPublishPanel(product) {
@@ -1205,7 +1861,13 @@ async function fillMissingMaterials(productId) {
     return;
   }
   for (const kind of kinds) {
-    const params = defaultGenerationParams(kind, product);
+    const platform = product.platforms?.[0] || "抖音";
+    const tpl = pickDefaultGenerationTemplate(platform, kind, {});
+    const params = {
+      ...defaultGenerationParams(kind, product),
+      platform,
+      generationTemplateId: tpl?.id || "",
+    };
     if (API_ENABLED) {
       await runApiAction("/api/actions/generate", { productId, kind, ...params });
     } else {
@@ -1221,7 +1883,13 @@ async function quickGenerate(productId, kind) {
   state.selectedProductId = productId;
   state.activeGenerator = kind;
   const product = productById(productId);
-  const params = defaultGenerationParams(kind, product);
+  const platform = product.platforms?.[0] || "抖音";
+  const tpl = pickDefaultGenerationTemplate(platform, kind, {});
+  const params = {
+    ...defaultGenerationParams(kind, product),
+    platform,
+    generationTemplateId: tpl?.id || "",
+  };
   if (API_ENABLED) {
     const ok = await runApiAction("/api/actions/generate", { productId, kind, ...params });
     if (ok) {
@@ -1238,7 +1906,7 @@ async function quickGenerate(productId, kind) {
 
 function filterAssetsList(items) {
   if (state.assetFilter === "all") return items;
-  if (state.assetFilter === "ready") return items.filter((item) => item.status === "已生成");
+  if (state.assetFilter === "ready") return items.filter((item) => item.status === "已生成" || item.publishQueued);
   return items.filter((item) => item.kind === state.assetFilter);
 }
 
@@ -1329,11 +1997,40 @@ function renderAssetPreview(asset, product) {
   return renderAssetImage(asset, product, "large-thumb");
 }
 
+function getAssetPublishState(asset) {
+  if (!asset) return { canPublish: false, label: "不可发布", message: "成品不存在。" };
+  const relatedTasks = publishTasks.filter((task) => task.assetId === asset.id);
+  const hasPending = relatedTasks.some((task) => ["待发布", "发布中", "执行中"].includes(task.status));
+  const hasSucceeded = relatedTasks.some((task) => task.status === "已成功");
+  if (asset.status === "已发布" || hasSucceeded) {
+    return { canPublish: false, label: "已发布", message: "该成品已经发布过，无需重复创建发布任务。" };
+  }
+  if (asset.status === "已加入发布" || asset.publishQueued || hasPending) {
+    return { canPublish: false, label: "已加入发布", message: "该成品已有发布任务，请到发布任务中心查看状态。" };
+  }
+  if (asset.status === "已生成") {
+    return { canPublish: true, label: "确认发布", message: "" };
+  }
+  return {
+    canPublish: false,
+    label: "不可发布",
+    message: `成品当前状态为「${asset.status || "未知"}」，需要先生成完成后再发布。`,
+  };
+}
+
+function renderPublishAssetButton(asset, className = "primary-btn", readyLabel = "确认发布") {
+  const publishState = getAssetPublishState(asset);
+  const label = publishState.canPublish ? readyLabel : publishState.label;
+  return `<button class="${className}" data-action="publish-asset" data-id="${asset.id}" ${publishState.canPublish ? "" : "disabled"}>${label}</button>`;
+}
+
 function renderAssetCard(asset, compact = false) {
   const product = productById(asset.productId);
   const sourceLabel = asset.source === "manual" ? "手动登记" : "AI 生成";
-  const publishDisabled = asset.status !== "已生成" ? "disabled" : "";
   const primaryBadge = asset.isPrimary ? `<span class="status green">主图</span>` : "";
+  const publishBtn = asset.publishQueued
+    ? `<span class="meta" style="color:var(--teal)">已加入发布</span>`
+    : renderPublishAssetButton(asset, "small-btn", "发布");
   return `
     <article class="asset-card ${state.selectedAssetId === asset.id && !compact ? "active" : ""}">
       ${renderAssetImage(asset, product, asset.kind === "video" ? "asset-preview video" : "asset-preview")}
@@ -1345,7 +2042,7 @@ function renderAssetCard(asset, compact = false) {
       <div class="inline-actions">
         ${statusPill(asset.status)}
         <button class="small-btn" data-action="preview-asset" data-id="${asset.id}">预览</button>
-        <button class="small-btn" data-action="publish-asset" data-id="${asset.id}" ${publishDisabled}>发布</button>
+        ${publishBtn}
       </div>
     </article>
   `;
@@ -1376,7 +2073,7 @@ function renderAssetPreviewPanel() {
         ${infoBox("绑定账号", product.accounts.join("、"))}
       </div>
       <div class="button-row" style="margin-top:16px">
-        <button class="primary-btn" data-action="publish-asset" data-id="${asset.id}" ${asset.status !== "已生成" ? "disabled" : ""}>确认发布</button>
+        ${renderPublishAssetButton(asset)}
         ${asset.kind === "copy" && asset.status === "已生成" ? `<button class="ghost-btn" data-action="start-asset-edit">${state.assetEditing ? "编辑中" : "编辑文案"}</button>` : ""}
         ${asset.kind === "image" && asset.status === "已生成" ? `<button class="ghost-btn" data-action="set-primary-image" data-id="${asset.id}" ${asset.isPrimary ? "disabled" : ""}>设为主图</button>` : ""}
         <button class="ghost-btn" data-action="go" data-view="generator">重新生成</button>
@@ -1402,6 +2099,9 @@ function emptyProductDraft() {
 
 function readProductForm(form) {
   const data = new FormData(form);
+  const pwPlatforms = Array.from(form.querySelectorAll('input[name="pwPlatform"]:checked')).map((el) => el.value);
+  const textPlatforms = inputToList(data.get("platforms"));
+  const platforms = pwPlatforms.length ? pwPlatforms : textPlatforms;
   return {
     name: String(data.get("name") || "").trim(),
     code: String(data.get("code") || "").trim(),
@@ -1409,11 +2109,11 @@ function readProductForm(form) {
     price: Number(data.get("price")),
     stock: Number(data.get("stock")),
     warningStock: Number(data.get("warningStock")),
-    platforms: inputToList(data.get("platforms")),
+    platforms,
     accounts: inputToList(data.get("accounts")),
     sellingPoints: String(data.get("sellingPoints") || "").trim(),
     specs: String(data.get("specs") || "").trim(),
-    autoStart: form.querySelector('[name="autoStart"]')?.checked ?? false,
+    startPlatformWorkflows: pwPlatforms.length > 0,
   };
 }
 
@@ -1446,7 +2146,14 @@ function renderProductFormFields(values, formId) {
       <label class="field field-wide"><span>绑定账号</span><input name="accounts" value="${escapeHtml(values.accounts)}" placeholder="抖音内容号 A" list="${idPrefix}account-list" /><datalist id="${idPrefix}account-list">${accounts.map((item) => `<option value="${escapeHtml(item.name)}"></option>`).join("")}</datalist></label>
       <label class="field field-wide"><span>核心卖点</span><textarea name="sellingPoints">${escapeHtml(values.sellingPoints)}</textarea></label>
       <label class="field field-wide"><span>规格信息</span><textarea name="specs">${escapeHtml(values.specs)}</textarea></label>
-      <label class="field field-wide checkbox-field"><input type="checkbox" name="autoStart" ${values.autoStart !== false ? "checked" : ""} /><span>创建后自动跑全流程（全自动运营）</span></label>
+      ${
+        formId === "create"
+          ? `<div class="field field-wide"><span>启动平台工作流（可多选）</span><div class="filter-row">${PLATFORM_WORKFLOW_OPTIONS.map(
+              (platform) =>
+                `<label class="field inline-field checkbox-field"><input type="checkbox" name="pwPlatform" value="${platform}" ${platform === "抖音" || String(values.platforms || "").includes(platform) ? "checked" : ""} /><span>${platform}</span></label>`
+            ).join("")}</div></div>`
+          : ""
+      }
     </div>
   `;
 }
@@ -1586,9 +2293,14 @@ async function registerAsset(payload) {
 
 async function publishAsset(assetId) {
   const asset = assetById(assetId);
-  if (!asset || asset.status !== "已生成") return false;
+  const publishState = getAssetPublishState(asset);
+  if (!publishState.canPublish) return { ok: publishState.label === "已发布", message: publishState.message };
+  const alreadyQueued = publishTasks.some((t) => t.assetId === assetId && ["待发布", "执行中"].includes(t.status));
+  if (alreadyQueued) return { ok: true, message: "该成品已有发布任务，请到发布任务中心查看状态。" };
   const product = productById(asset.productId);
   const account = getDefaultContentAccount(product);
+  if (!product) return { ok: false, message: "商品不存在，无法创建发布任务。" };
+  if (!account) return { ok: false, message: "未绑定可发布的内容账号。" };
   const payload = {
     assetId,
     productId: product.id,
@@ -1596,7 +2308,23 @@ async function publishAsset(assetId) {
     scheduleSlot: "今天",
     scheduleTime: "18:00",
   };
-  if (API_ENABLED) return runApiAction("/api/actions/publish-from-asset", payload);
+  if (API_ENABLED) {
+    try {
+      const response = await fetch("/api/actions/publish-from-asset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        return { ok: false, message: result.error || "发布任务创建失败。" };
+      }
+      if (result.data) applyDataState(result.data);
+      return { ok: true, message: result.message || "发布任务已创建。" };
+    } catch (error) {
+      return { ok: false, message: error.message ? `接口调用失败：${error.message}` : "接口调用失败，已保留当前页面状态。" };
+    }
+  }
   publishTasks.unshift({
     id: `PUB${String(publishTasks.length + 1).padStart(3, "0")}`,
     productId: product.id,
@@ -1614,13 +2342,14 @@ async function publishAsset(assetId) {
     attempts: 0,
     maxAttempts: 2,
   });
-  asset.status = "已发布";
+  asset.publishQueued = true;
+  asset.status = "已加入发布";
   asset.usage = "发布任务";
   product.publishStatus = product.stock === 0 ? "已暂停" : "待发布";
-  product[kindToStatusField(asset.kind)] = "已发布";
+  product[kindToStatusField(asset.kind)] = "已加入发布";
   logs.unshift({ productId: product.id, text: `[发布] 成品「${asset.name}」已创建发布任务`, time: "刚刚", action: "publish" });
   await persistState();
-  return true;
+  return { ok: true, message: "发布任务已创建。" };
 }
 
 async function saveAssetContent(assetId, payload) {
@@ -1806,12 +2535,12 @@ function finishLocalGenerationTask(taskId) {
     const script =
       String(task.params?.extraPrompt || "").trim() ||
       `[0-3s] 开场：${hook}，真的值得看看\n[3-12s] 展示：${product.name}，${product.sellingPoints}\n[12-15s] 转化：${product.specs}，适合${product.category}场景`;
-    const width = ratioLabel.includes("1:1") ? 960 : ratioLabel.includes("16:9") ? 1280 : 720;
-    const height = ratioLabel.includes("1:1") ? 960 : ratioLabel.includes("16:9") ? 720 : 1280;
+    const width = ratioLabel.includes("1:1") ? 960 : ratioLabel.includes("3:4") ? 720 : ratioLabel.includes("16:9") ? 1280 : 720;
+    const height = ratioLabel.includes("1:1") ? 960 : ratioLabel.includes("3:4") ? 960 : ratioLabel.includes("16:9") ? 720 : 1280;
     const posterSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${product.colors[0]}"/><stop offset="100%" stop-color="${product.colors[1]}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#bg)"/><polygon points="${width / 2 - 24},${height / 2 - 32} ${width / 2 - 24},${height / 2 + 32} ${width / 2 + 34},${height / 2}" fill="#ffffff"/><text x="48" y="72" font-size="34" fill="#ffffff">${product.name}</text><text x="48" y="118" font-size="22" fill="#e2e8f0">${videoType} · ${duration}</text></svg>`;
     asset.content = script;
     asset.videoType = videoType;
-    asset.aspectRatio = ratioLabel.includes("9:16") ? "9:16" : ratioLabel.includes("16:9") ? "16:9" : "1:1";
+    asset.aspectRatio = ratioLabel.includes("9:16") ? "9:16" : ratioLabel.includes("3:4") ? "3:4" : ratioLabel.includes("16:9") ? "16:9" : "1:1";
     asset.duration = duration;
     asset.posterUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(posterSvg)}`;
     asset.videoUrl = "";
@@ -1924,42 +2653,48 @@ function renderTopActions() {
   if (!topActions) return;
   const actionMap = {
     dashboard: `<button class="primary-btn" data-action="open-product-form">新建商品</button>`,
+    workflow: `<button class="ghost-btn" data-action="toggle-product-edit">${state.productEditing ? "收起资料" : "编辑资料"}</button><button class="primary-btn" data-action="open-product-form">新建商品</button>`,
     products: `<button class="ghost-btn" data-action="toggle-product-edit">${state.productEditing ? "收起资料" : "编辑资料"}</button><button class="primary-btn" data-action="open-product-form">新建商品</button>`,
     publish: `<button class="ghost-btn" data-action="go" data-view="accounts">平台账号</button><button class="primary-btn" data-action="open-publish-form">新建发布任务</button>`,
-    assets: `<button class="ghost-btn" data-action="go" data-view="products">返回运营台</button><button class="primary-btn" data-action="open-asset-form">登记成品</button>`,
-    tasks: `<button class="ghost-btn" data-action="go" data-view="products">商品运营台</button>`,
-    workflows: `<button class="ghost-btn" data-action="go" data-view="products">商品运营台</button><button class="primary-btn" data-action="batch-start-workflow">批量启动</button>`,
-    generator: `<button class="ghost-btn" data-action="go" data-view="products">商品运营台</button><button class="primary-btn" data-action="run-generator">开始生成</button>`,
-    inventory: `<button class="ghost-btn" data-action="go" data-view="products">商品运营台</button>`,
-    data: `<button class="ghost-btn" type="button" data-action="refresh-analytics">刷新数据</button>`,
+    inventory: `<button class="ghost-btn" data-action="go" data-view="workflow">平台工作流</button>`,
+    accounts: `<button class="ghost-btn" data-action="go" data-view="workflow">平台工作流</button>`,
   };
   topActions.innerHTML = actionMap[state.view] || actionMap.dashboard;
 }
 
 function setView(view) {
+  if (view === "products") view = "workflow";
+  if (REMOVED_VIEWS.has(view)) {
+    showToast("该功能已收敛到平台工作流，请从核心路径操作。");
+    view = view === "assets" || view === "generator" ? "workflow" : "dashboard";
+  }
+  if (view !== "workflow" && !productById(state.selectedProductId)) {
+    state.selectedProductId = products[0]?.id || "";
+  }
   state.view = view;
-  pageTitle.textContent = titles[view];
+  pageTitle.textContent = titles[view] || titles.dashboard;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
   renderTopActions();
-  if (view === "data") {
-    Promise.all([loadAnalytics(), loadStrategySummary(), loadTemplateAb()]).then(() => render());
-    return;
-  }
-  if (view === "workflows") {
-    Promise.all([loadWorkflowOrchestratorData(), loadWorkflowTemplates()]).then(() => render());
-    return;
-  }
-  if (view === "products") {
-    loadProductStrategy(state.selectedProductId).then(() => renderProducts());
-    return;
-  }
   render();
 }
 
+function startNewProductFlow() {
+  state.selectedProductId = "";
+  state.selectedPlatformWorkflowId = "";
+  state.productEditing = false;
+  state.productDeskExpanded = false;
+  state.productFormOpen = false;
+  state.workflowLaunchOpen = true;
+  state.launchPlatforms = [];
+  state.uploadedImages = [];
+  state.launchDraft = { name: "", category: "", price: "", stock: "", sellingPoints: "", specs: "" };
+  setView("workflow");
+}
+
 function renderInboxItem(item) {
-  return `<article class="inbox-item inbox-${item.tone}"><div><div class="task-title">${escapeHtml(item.title)}</div><div class="meta">${escapeHtml(item.meta)}</div></div><button class="small-btn primary-inline" data-action="${item.action}" data-view="${item.view || ""}" data-product="${item.productId || ""}" data-asset="${item.assetId || ""}" data-task="${item.taskId || ""}" data-workflow="${item.workflowId || ""}">${escapeHtml(item.cta)}</button></article>`;
+  return `<article class="inbox-item inbox-${item.tone}"><div><div class="task-title">${escapeHtml(item.title)}</div><div class="meta">${escapeHtml(item.meta)}</div></div><button class="small-btn primary-inline" data-action="${item.action}" data-view="${item.view || ""}" data-product="${item.productId || ""}" data-asset="${item.assetId || ""}" data-task="${item.taskId || ""}" data-workflow="${item.workflowId || ""}" data-platform-workflow="${item.platformWorkflowId || ""}">${escapeHtml(item.cta)}</button></article>`;
 }
 
 function renderListingTaskRow(task) {
@@ -2012,9 +2747,9 @@ function getProductNextAction(product) {
       tone: "danger",
       step: "处理失败任务",
       title: `${failedTask.label || "生成"}失败，需要重试或改参数`,
-      detail: failedTask.error || "失败任务不会阻塞其他商品，但会影响该商品继续发布。",
-      button: "查看任务",
-      actionAttrs: `data-action="go" data-view="tasks"`,
+      detail: failedTask.error || "在运营台左栏可重试生成任务。",
+      button: "去运营台",
+      actionAttrs: `data-action="open-product-desk" data-product="${product.id}" data-task="${failedTask.id}"`,
     };
   }
   if (activeTask) {
@@ -2023,17 +2758,17 @@ function getProductNextAction(product) {
       step: "等待生成完成",
       title: `${activeTask.label || "素材"}正在生成`,
       detail: "生成完成后会自动进入成品库，可在运营台预览并发布。",
-      button: "查看任务",
-      actionAttrs: `data-action="go" data-view="tasks"`,
+      button: "查看进度",
+      actionAttrs: `data-action="open-product-desk" data-product="${product.id}" data-task="${activeTask.id}"`,
     };
   }
   if (workflow?.status === "等待确认") {
     return {
       tone: "primary",
       step: "预览确认",
-      title: "自动化流程正在等你确认成品",
-      detail: "确认后流程会继续创建上架和发布任务。",
-      button: "去确认",
+      title: "有素材待你预览确认",
+      detail: "在运营台中栏预览成品，满意后创建上架或发布任务。",
+      button: "去预览",
       actionAttrs: `data-action="open-product-desk" data-product="${product.id}" data-workflow="${workflow.id}"`,
     };
   }
@@ -2079,12 +2814,11 @@ function getProductNextAction(product) {
 
 function renderOperatingPath() {
   const steps = [
-    ["1", "看今日工作台", "系统只把需要你处理的事项推到这里。"],
-    ["2", "进商品运营台", "围绕一个商品完成生成、预览和发布。"],
-    ["3", "确认发布任务", "检查上架草稿、发布账号、库存和导出。"],
-    ["4", "看数据和策略", "用表现数据优化模板、账号和下一轮内容。"],
+    ["1", "录入并选平台", "新建商品，勾选抖音/小红书/淘宝链路。"],
+    ["2", "按节点推进", "左栏看进度，中间完成生成/确认，右侧上架发布。"],
+    ["3", "发布任务跟进", "全局查看上架与内容发布状态。"],
   ];
-  return `<section class="operator-guide"><div class="guide-copy"><span class="guide-label">推荐工作方式</span><h2>今天先处理什么，系统应该直接告诉你</h2><p>这个系统不是让你在工具里找功能，而是按商品运营顺序推进：先看待办，再处理单个商品，最后跟进发布和数据。</p><div class="button-row"><button class="primary-btn" data-action="go" data-view="products">开始处理商品</button><button class="ghost-btn" data-action="open-product-form">新建商品</button></div></div><div class="guide-steps">${steps
+  return `<section class="operator-guide"><div class="guide-copy"><span class="guide-label">M14 平台工作流</span><h2>录入 → 生成 → 确认 → 上架发布</h2><p>每条平台独立链路：抖音最全，淘宝仅图+文+上架，小红书一店一号+视频。</p><div class="button-row"><button class="primary-btn" data-action="go" data-view="workflow">进入平台工作流</button><button class="ghost-btn" data-action="open-product-form">新建商品</button></div></div><div class="guide-steps">${steps
     .map(([number, title, detail]) => `<div class="guide-step"><span>${number}</span><strong>${title}</strong><p>${detail}</p></div>`)
     .join("")}</div></section>`;
 }
@@ -2097,17 +2831,78 @@ function renderNextBestAction(product) {
 function renderDashboard() {
   const inbox = buildInboxItems();
   const selected = productById(state.selectedProductId);
-  root.innerHTML = `${renderOperatingPath()}${renderNextBestAction(selected)}${renderKpis()}<section class="grid two-col dashboard-main"><div class="panel"><div class="panel-header"><div><h2>需要你处理</h2><p>这里只放会阻塞运营继续推进的事项。</p></div><button class="ghost-btn" data-action="go" data-view="products">全部商品</button></div><div class="list inbox-list">${inbox.length ? inbox.map(renderInboxItem).join("") : `<div class="empty-state"><h3>暂无待办</h3><p class="meta">可以去商品运营台新建商品，或一键补全素材。</p><button class="primary-btn" data-action="go" data-view="products">打开商品运营台</button></div>`}</div></div><div>${renderAutoOpsPanel()}</div></section><section class="panel"><div class="panel-header"><div><h2>商品概览</h2><p>选一个商品进入运营台，按 1-2-3 完成处理。</p></div></div>${renderProductTable(products)}</section>`;
+  root.innerHTML = `${renderOperatingPath()}${renderNextBestAction(selected)}${renderKpis()}<section class="panel"><div class="panel-header"><div><h2>需要你处理</h2><p>只展示阻塞核心链路的待办：预览发布、生成失败、缺素材、库存异常。</p></div><button class="ghost-btn" data-action="go" data-view="workflow">全部商品</button></div><div class="list inbox-list">${inbox.length ? inbox.map(renderInboxItem).join("") : `<div class="empty-state"><h3>暂无待办</h3><p class="meta">去平台工作流新建商品，或一键补全素材。</p><button class="primary-btn" data-action="go" data-view="workflow">打开平台工作流</button></div>`}</div></section><section class="panel"><div class="panel-header"><div><h2>商品概览</h2><p>进入工作流：按平台节点推进生成与发布。</p></div></div>${renderProductTable(products)}</section>`;
+}
+
+function filterProducts(items) {
+  const q = state.productSearch.toLowerCase().trim();
+  const f = state.productFilter;
+  return items.filter((p) => {
+    if (q && !p.name.toLowerCase().includes(q) && !p.code?.toLowerCase().includes(q)) return false;
+    if (f === "lowStock") return p.stock <= (p.warningStock || 0);
+    if (f === "outOfStock") return p.stock === 0;
+    if (f === "pending") {
+      return p.imageStatus !== "已生成" || p.copyStatus !== "已生成" || p.videoStatus !== "已生成";
+    }
+    if (f === "listing") return p.listingStatus === "未上架";
+    if (f === "published") return p.publishStatus === "已发布";
+    return true;
+  });
 }
 
 function renderProducts() {
-  const product = productById(state.selectedProductId);
-  const productLogs = logs.filter((item) => item.productId === product.id).slice(0, 8);
-  root.innerHTML = `<section class="panel desk-header-panel"><div class="panel-header"><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.code)} / ${escapeHtml(product.category)} / 库存 ${product.stock}</p></div>${statusPill(product.status)}</div>${renderProductPicker()}${renderProgressSteps(product)}</section>${renderNextBestAction(product)}<section class="product-desk">${renderInlineGenerator(product)}${renderDeskAssetPanel(product)}${renderDeskPublishPanel(product)}</section><section class="grid two-col secondary-workspace"><div>${renderDeskStrategyPanel(product)}</div><div>${renderDeskWorkflowPanel(product)}</div></section><section class="panel desk-meta-panel"><div class="panel-header"><div><h3>商品资料与日志</h3><p>必要信息保留在此，默认折叠，需要时再展开。</p></div><button class="ghost-btn" type="button" data-action="toggle-product-edit">${state.productEditing || state.productDeskExpanded ? "收起" : "展开编辑"}</button></div>${
-    state.productEditing || state.productDeskExpanded
-      ? `<div class="detail-layout"><div class="detail-hero">${thumb(product, "large-thumb")}${state.productEditing ? `<form id="editProductForm" class="product-form detail-form">${renderProductFormFields(productToFormValues(product), "edit")}</form>` : `<div class="info-grid">${infoBox("价格", `¥${product.price}`)}${infoBox("目标平台", product.platforms.join("、"))}${infoBox("绑定账号", product.accounts.join("、"))}${infoBox("卖点", product.sellingPoints)}${infoBox("规格", product.specs)}</div>`}</div><div class="timeline">${productLogs.map(renderLog).join("") || "<p class='meta'>暂无日志。</p>"}</div></div>`
-      : `<p class="meta">图片 ${product.imageStatus} / 文案 ${product.copyStatus} / 视频 ${product.videoStatus} / 上架 ${product.listingStatus} / 发布 ${product.publishStatus}</p>`
-  }</section>`;
+  if (state.view !== "products") { render(); return; }
+  const filtered = filterProducts(products);
+  const selected = productById(state.selectedProductId);
+  const filters = [
+    ["all", "全部", products.length],
+    ["pending", "待生成", products.filter((p) => p.imageStatus !== "已生成" || p.copyStatus !== "已生成" || p.videoStatus !== "已生成").length],
+    ["lowStock", "库存预警", products.filter((p) => p.stock <= (p.warningStock || 0)).length],
+    ["outOfStock", "无货", products.filter((p) => p.stock === 0).length],
+    ["listing", "未上架", products.filter((p) => p.listingStatus === "未上架").length],
+    ["published", "已发布", products.filter((p) => p.publishStatus === "已发布").length],
+  ];
+  const filterChips = filters.map(([key, label, count]) =>
+    `<button class="chip-btn ${state.productFilter === key ? "active" : ""}" data-action="filter-product" data-filter="${key}">${escapeHtml(label)}<span class="chip-count">${count}</span></button>`
+  ).join("");
+  const listItems = filtered.length ? filtered.map((p) => {
+    const active = p.id === selected?.id;
+    return `<article class="task-item product-list-item ${active ? "selected" : ""}" data-action="select-product-list" data-id="${p.id}">
+      <div>
+        <div class="task-title">${escapeHtml(p.name)}</div>
+        <div class="meta">${escapeHtml(p.code || "")} · ${escapeHtml(p.category)} · ¥${p.price} · 库存 ${p.stock}</div>
+      </div>
+      <div class="inline-actions">${statusPill(p.imageStatus, "图")}${statusPill(p.copyStatus, "文")}${statusPill(p.videoStatus, "视")}</div>
+    </article>`;
+  }).join("") : `<p class="meta" style="padding:24px;text-align:center">暂无匹配商品。</p>`;
+  const detailPanel = selected ? renderProductDetailPanel(selected) : `<div class="panel" style="place-items:center;display:grid;padding:48px"><p class="meta">选择一个商品查看详情</p></div>`;
+  root.innerHTML = `<section class="assets-layout">
+    <div class="panel">
+      <div class="panel-header"><div><h2>商品管理</h2><p>共 ${products.length} 个商品</p></div><div class="inline-actions"><button class="primary-btn" data-action="new-product">新建商品</button></div></div>
+      <div class="filter-row">${filterChips}</div>
+      <div class="search-bar"><input type="text" id="productSearchInput" placeholder="搜索商品名称或编号…" value="${escapeHtml(state.productSearch)}" data-action="product-search" /></div>
+      <div class="list product-list" style="max-height:calc(100vh - 280px);overflow-y:auto">${listItems}</div>
+    </div>
+    ${detailPanel}
+  </section>`;
+  const input = document.getElementById("productSearchInput");
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+
+function renderProductDetailPanel(product) {
+  const pw = getProductPlatformWorkflowsLocal(product.id);
+  const productAssets = getProductAssets(product.id);
+  return `<div class="panel">
+    <div class="panel-header"><div><h3>${escapeHtml(product.name)}</h3><p>${escapeHtml(product.code || "")} · ${escapeHtml(product.category)}</p></div>${statusPill(product.status)}</div>
+    <div class="info-grid">${infoBox("价格", `¥${product.price}`)}${infoBox("库存", product.stock)}${infoBox("卖点", escapeHtml(product.sellingPoints || "—"))}${infoBox("规格", escapeHtml(product.specs || "—"))}</div>
+    <div style="display:flex;gap:8px;margin:10px 0">${statusPill(product.imageStatus, "图片")}${statusPill(product.copyStatus, "文案")}${statusPill(product.videoStatus, "视频")}${statusPill(product.listingStatus, "上架")}${statusPill(product.publishStatus, "发布")}</div>
+    <div class="button-row">${pw.length ? `<button class="primary-btn" type="button" data-action="open-product-desk" data-product="${product.id}">运营台</button>` : ""}<button class="ghost-btn" type="button" data-action="toggle-product-edit">编辑</button><button class="ghost-btn" type="button" data-action="create-listing" data-product="${product.id}">上架</button><button class="ghost-btn" type="button" data-action="export-product-pack" data-product="${product.id}">导出</button></div>
+    <div style="margin-top:14px"><h4 class="desk-subtitle">平台工作流</h4><div class="list compact-list">${pw.length ? pw.map((w) => `<article class="task-item compact"><div><div class="task-title">${escapeHtml(w.platform)}</div><div class="meta">进度 ${w.progress || 0}%</div></div>${statusPill(w.status)}<button class="small-btn" data-action="open-platform-workflow" data-product="${product.id}" data-platform-workflow="${w.id}" data-platform="${w.platform}">打开</button></article>`).join("") : "<p class='meta'>暂无平台工作流，可在运营台创建。</p>"}</div></div>
+    <div style="margin-top:14px"><h4 class="desk-subtitle">成品（${productAssets.length}）</h4><div class="list compact-list">${productAssets.slice(0, 5).map((a) => `<article class="task-item compact"><div><div class="task-title">${escapeHtml(a.name)}</div><div class="meta">${a.type} · ${a.version}</div></div>${statusPill(a.status)}</article>`).join("") || "<p class='meta'>暂无成品。</p>"}</div></div>
+  </div>`;
 }
 
 function kpi(label, value, note, color) {
@@ -2123,81 +2918,310 @@ function renderKpis() {
 }
 
 function renderProductTable(items) {
-  return `<div class="table-wrap"><table><thead><tr><th>商品</th><th>类目</th><th>库存</th><th>图片</th><th>文案</th><th>视频</th><th>上架</th><th>发布</th><th>操作</th></tr></thead><tbody>${items.map((product) => `<tr><td><div class="product-cell">${thumb(product)}<div><strong>${product.name}</strong><div class="meta">${product.code}</div></div></div></td><td>${product.category}</td><td>${product.stock}</td><td>${statusPill(product.imageStatus)}</td><td>${statusPill(product.copyStatus)}</td><td>${statusPill(product.videoStatus)}</td><td>${statusPill(product.listingStatus)}</td><td>${statusPill(product.publishStatus)}</td><td><button class="small-btn" data-action="select-product" data-id="${product.id}">运营台</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>商品</th><th>类目</th><th>库存</th><th>图片</th><th>文案</th><th>视频</th><th>上架</th><th>发布</th><th>操作</th></tr></thead><tbody>${items.map((product) => `<tr><td><div class="product-cell">${thumb(product)}<div><strong>${product.name}</strong><div class="meta">${product.code}</div></div></div></td><td>${product.category}</td><td>${product.stock}</td><td>${statusPill(product.imageStatus)}</td><td>${statusPill(product.copyStatus)}</td><td>${statusPill(product.videoStatus)}</td><td>${statusPill(product.listingStatus)}</td><td>${statusPill(product.publishStatus)}</td><td><button class="small-btn" data-action="select-product" data-id="${product.id}">工作流</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+async function loadProductImages(productId) {
+  state.productReferenceUrls = [];
+  if (!API_ENABLED) { state.productImages = []; return; }
+  try {
+    const res = await fetch(`/api/actions/products/${productId}/images`);
+    const result = await res.json();
+    state.productImages = result.images || [];
+  } catch { state.productImages = []; }
+}
+
+async function uploadProductImages(productId) {
+  if (!API_ENABLED || !state.uploadedImages.length) return;
+  const images = state.uploadedImages.map((img) => ({
+    name: img.name || "image.png",
+    data: img.src,
+  }));
+  await runApiAction(`/api/actions/products/${productId}/images`, { images });
+  await loadProductImages(productId);
+}
+
+async function loadModelImages() {
+  if (!API_ENABLED) { state.modelImages = []; return; }
+  try {
+    const res = await fetch("/api/actions/model-images");
+    const result = await res.json();
+    state.modelImages = result.images || [];
+  } catch { state.modelImages = []; }
+}
+
+async function uploadModelImages() {
+  if (!API_ENABLED || !state.uploadedImages.length) return;
+  const images = state.uploadedImages.map((img) => ({
+    name: img.name || "image.png",
+    data: img.src,
+  }));
+  try {
+    await runApiAction("/api/actions/model-images", { images });
+    showToast(`成功上传 ${images.length} 张模特图`);
+  } catch (e) {
+    showToast("上传模特图失败：" + (e.message || "未知错误"));
+  }
+  state.uploadedImages = [];
+  await loadModelImages();
+  rerender();
+}
+
+async function deleteModelImage(id) {
+  if (!API_ENABLED) return;
+  await runApiAction("/api/actions/model-images", { id }, "DELETE");
+  await loadModelImages();
+  rerender();
+}
+
+async function loadTemplateVideos() {
+  if (!API_ENABLED) { state.templateVideos = []; return; }
+  try {
+    const res = await fetch("/api/actions/template-videos");
+    const result = await res.json();
+    state.templateVideos = result.videos || [];
+  } catch { state.templateVideos = []; }
+}
+
+async function uploadTemplateVideos() {
+  if (!API_ENABLED || !state.uploadedImages.length) return;
+  const videos = state.uploadedImages.map((v) => ({
+    name: v.name || "video.mp4",
+    data: v.src,
+  }));
+  try {
+    await runApiAction("/api/actions/template-videos", { videos });
+    showToast(`成功上传 ${videos.length} 个模板视频`);
+  } catch (e) {
+    showToast("上传模板视频失败：" + (e.message || "未知错误"));
+  }
+  state.uploadedImages = [];
+  await loadTemplateVideos();
+  rerender();
+}
+
+async function loadAllProductImages() {
+  if (!API_ENABLED) { state.allProductImages = []; return; }
+  try {
+    const res = await fetch("/api/actions/all-product-images");
+    const result = await res.json();
+    state.allProductImages = result.images || [];
+  } catch { state.allProductImages = []; }
+}
+
+async function loadGeneratedModelImages() {
+  if (!API_ENABLED) { state.generatedModelImages = []; return; }
+  try {
+    const res = await fetch("/api/actions/generated-model-images");
+    const result = await res.json();
+    state.generatedModelImages = result.images || [];
+  } catch { state.generatedModelImages = []; }
+}
+
+async function deleteGeneratedModelImage(id) {
+  if (!API_ENABLED) return;
+  await runApiAction("/api/actions/generated-model-images", { id }, "DELETE");
+  await loadGeneratedModelImages();
+  rerender();
+}
+
+async function deleteTemplateVideo(id) {
+  if (!API_ENABLED) return;
+  await runApiAction("/api/actions/template-videos", { id }, "DELETE");
+  await loadTemplateVideos();
+  rerender();
+}
+
+function renderProductReferenceImages(productId, kind) {
+  const productImages = state.productImages || [];
+  const modelImages = state.modelImages || [];
+  const genImages = state.generatedModelImages || [];
+  const selectedModel = state.selectedModelImageUrls;
+  const selectedProduct = state.productReferenceUrls;
+
+  function radioGroup(name, items, selected) {
+    return items.length
+      ? `<div class="ref-image-grid" style="grid-template-columns:repeat(auto-fill,minmax(100px,1fr))">${items.map((img) => {
+          const checked = selected.includes(img.url);
+          return `<label class="ref-image-item ${checked ? "selected" : ""}" data-action="select-slot-img" data-slot="${name}" data-url="${img.url}"><img src="${img.url}" alt="${escapeHtml(img.name)}"><span class="ref-image-name">${escapeHtml(img.name)}</span></label>`;
+        }).join("")}</div>`
+      : `<p class="meta">暂无。可前往<a class="link-btn" data-action="go" data-view="materials">素材库</a>上传。</p>`;
+  }
+
+  if (kind === "video") {
+    const uploaded = state.videoRefUploadedImages || [];
+    const allImages = [...genImages, ...uploaded];
+    return `<div class="product-ref-images">
+      <div class="ref-slot" style="margin-bottom:14px">
+        <p class="meta" style="font-weight:600;margin-bottom:4px">🖼️ 参考图片（必选）</p>
+        <p class="meta" style="font-size:11px;margin-bottom:6px">上传一张图片或从已生成的换装结果中选择</p>
+        ${radioGroup("slot_ref_video", allImages, state.productReferenceUrls)}
+        <div style="margin-top:8px">
+          <label class="file-upload-btn" data-action="upload-video-ref-image">
+            <input type="file" accept="image/*" style="display:none" />
+            上传参考图片
+          </label>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="product-ref-images">
+    <div class="ref-slot" style="margin-bottom:14px">
+      <p class="meta" style="font-weight:600;margin-bottom:4px">📷 槽1 · 模特图（必选）</p>
+      <p class="meta" style="font-size:11px;margin-bottom:6px">选一张模特全身照作为被换装对象</p>
+      ${radioGroup("slot1_model", modelImages, selectedModel)}
+    </div>
+    <div class="ref-slot" style="margin-bottom:14px">
+      <p class="meta" style="font-weight:600;margin-bottom:4px">👕 槽2 · 商品原图（必选）</p>
+      <p class="meta" style="font-size:11px;margin-bottom:6px">选一张商品实拍，工作流会将此衣物换到模特身上</p>
+      ${radioGroup("slot2_product", productImages, selectedProduct)}
+    </div>
+    <div class="ref-slot">
+      <p class="meta" style="font-weight:600;margin-bottom:4px">🔄 槽3 · 补充图（可选）</p>
+      <p class="meta" style="font-size:11px;margin-bottom:6px">可选第二张模特图或商品细节作为参考</p>
+      ${radioGroup("slot3_extra", [...modelImages, ...productImages], state.selectedSlot3Urls)}
+    </div>
+  </div>`;
+}
+
+function readReferenceImageUrls() {
+  const slot2 = state.productReferenceUrls;
+  return slot2.length ? slot2 : [];
+}
+
+function readModelImageUrls() {
+  const slot1 = state.selectedModelImageUrls;
+  return slot1.length ? slot1 : [];
+}
+
+function readSlot3Urls() {
+  return state.selectedSlot3Urls.length ? state.selectedSlot3Urls : [];
 }
 
 function readGeneratorForm() {
   const form = document.querySelector("#generatorForm");
   if (!form) return {};
   const data = new FormData(form);
-  if (state.activeGenerator === "copy") {
+  const kind = form.querySelector("[data-action='generation-template-change']")?.dataset.kind || state.activeGenerator;
+  const generationTemplateId = String(data.get("generationTemplateId") || state.selectedGenerationTemplateId || "").trim();
+  if (kind === "copy") {
     return {
       copyType: String(data.get("copyType") || "发布文案"),
       platform: String(data.get("platform") || "抖音"),
       versionCount: Number(data.get("versionCount") || 3),
       extraPrompt: String(data.get("extraPrompt") || "").trim(),
       accountId: String(data.get("accountId") || "").trim(),
+      generationTemplateId,
     };
   }
-  if (state.activeGenerator === "image") {
+  const refImageUrls = readReferenceImageUrls();
+  const modelImageUrls = readModelImageUrls();
+  const slot3Urls = readSlot3Urls();
+  if (kind === "image") {
     return {
       imageType: String(data.get("imageType") || "商品主图"),
       imageSize: String(data.get("imageSize") || "1:1 平台主图"),
       imageCount: Number(data.get("imageCount") || 4),
       extraPrompt: String(data.get("extraPrompt") || "").trim(),
+      generationTemplateId,
+      referenceImageUrls: refImageUrls,
+      modelImageUrls,
+      slot3Urls,
     };
   }
   return {
     videoType: String(data.get("videoType") || "商品展示视频"),
     videoRatio: String(data.get("videoRatio") || "9:16 竖版"),
-    videoDuration: String(data.get("videoDuration") || "15 秒"),
+    videoDuration: String(data.get("videoDuration") || "7 秒"),
     extraPrompt: String(data.get("extraPrompt") || "").trim(),
+    generationTemplateId,
+    referenceImageUrls: refImageUrls,
+    referenceVideoUrl: data.get("referenceVideoUrl") === "__custom__" ? String(data.get("referenceVideoUrlCustom") || "").trim() : String(data.get("referenceVideoUrl") || "").trim(),
+    seconds: String(data.get("seconds") ?? ""),
+    frameRate: String(data.get("frameRate") ?? ""),
+    videoWidth: String(data.get("videoWidth") ?? ""),
+    videoHeight: String(data.get("videoHeight") ?? ""),
+    mode: String(data.get("mode") ?? ""),
+    expressionIntensity: String(data.get("expressionIntensity") ?? ""),
+    ruKilnAmplitude: String(data.get("ruKilnAmplitude") ?? ""),
   };
 }
 
-function renderGeneratorFields() {
-  if (state.activeGenerator === "image") {
-    const providerNote = {
-      runninghub: "已接入 RunningHub 图片生成",
-      template: "当前使用模板预览（在 .env 配置 RUNNINGHUB_API_KEY 可切换）",
-    }[state.imageProvider] || "当前使用模板预览";
-    return `<label class="field"><span>图片类型</span><select name="imageType">${["商品主图", "详情页图", "卖点图", "封面图"].map((item) => `<option value="${item}">${item}</option>`).join("")}</select></label><label class="field"><span>输出尺寸</span><select name="imageSize"><option value="1:1 平台主图">1:1 平台主图</option><option value="3:4 小红书">3:4 小红书</option><option value="9:16 竖版">9:16 竖版</option></select></label><label class="field"><span>生成数量</span><select name="imageCount"><option value="1">1 张</option><option value="2">2 张</option><option value="4" selected>4 张</option><option value="6">6 张</option></select></label><label class="field field-wide"><span>风格要求</span><textarea name="extraPrompt">真实商品质感，干净背景，突出核心卖点。</textarea></label><p class="meta">${providerNote}</p>`;
-  }
-  if (state.activeGenerator === "copy") {
-    const product = productById(state.selectedProductId);
-    const defaultAccount = getDefaultContentAccount(product);
-    const providerNote = {
-      deepseek: "已接入 DeepSeek 文案模型",
-      api: "已接入 AI 文案模型",
-      template: "当前使用模板引擎（在 .env 配置 COPY_API_KEY 可切换）",
-    }[state.copyProvider] || "当前使用模板引擎";
-    return `<label class="field"><span>文案类型</span><select name="copyType">${COPY_TYPE_OPTIONS.map((item) => `<option value="${item}">${item}</option>`).join("")}</select></label><label class="field"><span>发布账号</span><select name="accountId">${renderAccountOptions(product, defaultAccount?.id || "")}</select></label><label class="field"><span>目标平台</span><select name="platform">${PLATFORM_OPTIONS.map((item) => `<option value="${item}">${item}</option>`).join("")}</select></label><label class="field"><span>生成版本数</span><select name="versionCount"><option value="1">1 版</option><option value="2">2 版</option><option value="3" selected>3 版</option><option value="4">4 版</option><option value="5">5 版</option></select></label><label class="field field-wide"><span>额外要求</span><textarea name="extraPrompt" placeholder="例如：不要夸大宣传，强调使用场景和购买理由。">不要夸大宣传，强调使用场景和购买理由。</textarea></label><p class="meta">${providerNote} · 不同账号人设会生成不同风格文案</p>`;
-  }
-  return `<label class="field"><span>视频类型</span><select name="videoType">${["商品展示视频", "图文混剪视频", "商品讲解视频"].map((item) => `<option value="${item}">${item}</option>`).join("")}</select></label><label class="field"><span>视频比例</span><select name="videoRatio"><option value="9:16 竖版">9:16 竖版</option><option value="1:1 方版">1:1 方版</option><option value="16:9 横版">16:9 横版</option></select></label><label class="field"><span>时长</span><select name="videoDuration"><option value="15 秒">15 秒</option><option value="30 秒">30 秒</option></select></label><label class="field field-wide"><span>脚本 / 额外要求</span><textarea name="extraPrompt" placeholder="可填写分镜脚本；留空则根据商品资料自动生成。"></textarea></label><p class="meta">${{
-    runninghub: "已接入 RunningHub 视频生成",
-    template: "当前使用模板预览（在 .env 配置 RUNNINGHUB_API_KEY 可切换）",
-  }[state.videoProvider] || "当前使用模板预览"}</p>`;
+function draftVal(key, fallback) {
+  const v = state.generatorFormDraft?.[key];
+  if (v !== undefined) return v;
+  return fallback;
 }
 
-function renderGenerator() {
+function renderGeneratorFields(options = {}) {
+  const kind = options.kind || state.activeGenerator;
+  const platform = options.platform || "";
+  const tpl = pickDefaultGenerationTemplate(platform, kind, options.nodeParams || {});
+  const templateField =
+    platform && kind
+      ? renderGenerationTemplatePicker(platform, kind, options.nodeParams || {})
+      : "";
+  if (kind === "image") {
+    const providerNote = "选择模板后，点击开始生成即可。";
+    const defs = tpl?.defaults || {};
+    const sel = (key, fallback) => draftVal(key, fallback);
+    const count = Number(sel("imageCount", defs.imageCount || 1));
+    return `${templateField}<label class="field"><span>图片类型</span><select name="imageType">${["商品主图", "详情页图", "卖点图", "封面图"].map((item) => `<option value="${item}" ${sel("imageType", defs.imageType) === item ? "selected" : ""}>${item}</option>`).join("")}</select></label><label class="field"><span>输出尺寸</span><select name="imageSize"><option value="1:1 平台主图" ${sel("imageSize", defs.imageSize) === "1:1 平台主图" ? "selected" : ""}>1:1 平台主图</option><option value="3:4 小红书" ${sel("imageSize", defs.imageSize) === "3:4 小红书" ? "selected" : ""}>3:4 小红书</option><option value="9:16 竖版" ${sel("imageSize", defs.imageSize) === "9:16 竖版" ? "selected" : ""}>9:16 竖版</option></select></label><label class="field"><span>生成数量</span><select name="imageCount"><option value="1" ${count === 1 ? "selected" : ""}>1 张</option><option value="2" ${count === 2 ? "selected" : ""}>2 张</option><option value="4" ${count === 4 ? "selected" : ""}>4 张</option></select></label><label class="field field-wide"><span>生成要求</span><textarea name="extraPrompt">${escapeHtml(sel("extraPrompt", tpl?.promptHint || "真实商品质感，干净背景，突出核心卖点。"))}</textarea></label><p class="meta">${providerNote} RunningHub 生图会使用下方商品原图；未勾选时默认使用已上传原图。</p>`;
+  }
+  if (kind === "copy") {
+    const product = productById(state.selectedProductId);
+    const defaultAccount = getDefaultContentAccount(product);
+    const defs = tpl?.defaults || {};
+    const providerNote = "不同账号人设会生成不同风格文案。";
+    const plat = platform || product.platforms?.[0] || "抖音";
+    const sel = (key, fallback) => draftVal(key, fallback);
+    return `${templateField}<label class="field"><span>文案类型</span><select name="copyType">${COPY_TYPE_OPTIONS.map((item) => `<option value="${item}" ${sel("copyType", defs.copyType) === item ? "selected" : ""}>${item}</option>`).join("")}</select></label><label class="field"><span>发布账号</span><select name="accountId">${renderAccountOptions(product, defaultAccount?.id || "")}</select></label><label class="field"><span>目标平台</span><select name="platform">${PLATFORM_OPTIONS.map((item) => `<option value="${item}" ${sel("platform", plat) === item ? "selected" : ""}>${item}</option>`).join("")}</select></label><label class="field"><span>生成版本数</span><select name="versionCount"><option value="1" ${Number(sel("versionCount", defs.versionCount)) === 1 ? "selected" : ""}>1 版</option><option value="2" ${Number(sel("versionCount", defs.versionCount)) === 2 ? "selected" : ""}>2 版</option><option value="3" ${!sel("versionCount", defs.versionCount) || Number(sel("versionCount", defs.versionCount)) === 3 ? "selected" : ""}>3 版</option><option value="4" ${Number(sel("versionCount", defs.versionCount)) === 4 ? "selected" : ""}>4 版</option><option value="5" ${Number(sel("versionCount", defs.versionCount)) === 5 ? "selected" : ""}>5 版</option></select></label><label class="field field-wide"><span>额外要求</span><textarea name="extraPrompt" placeholder="例如：不要夸大宣传，强调使用场景和购买理由。">${escapeHtml(sel("extraPrompt", tpl?.promptHint || "不要夸大宣传，强调使用场景和购买理由。"))}</textarea></label><p class="meta">${providerNote}</p>`;
+  }
+  const vdefs = tpl?.defaults || {};
+  const vsel = (key, fallback) => draftVal(key, fallback);
+  return `${templateField}<label class="field"><span>视频类型</span><select name="videoType">${["商品展示视频", "图文混剪视频", "商品讲解视频"].map((item) => `<option value="${item}" ${vsel("videoType", vdefs.videoType) === item ? "selected" : ""}>${item}</option>`).join("")}</select></label><label class="field"><span>视频比例</span><select name="videoRatio"><option value="9:16 竖版" ${!vsel("videoRatio", vdefs.videoRatio) || vsel("videoRatio", vdefs.videoRatio) === "9:16 竖版" ? "selected" : ""}>9:16 竖版</option><option value="1:1 方版" ${vsel("videoRatio", vdefs.videoRatio) === "1:1 方版" ? "selected" : ""}>1:1 方版</option><option value="16:9 横版" ${vsel("videoRatio", vdefs.videoRatio) === "16:9 横版" ? "selected" : ""}>16:9 横版</option></select></label><label class="field"><span>秒数</span><input type="number" min="1" max="30" step="1" name="seconds" value="${escapeHtml(vsel("seconds", vdefs.seconds || "7"))}" /></label><label class="field"><span>帧率</span><input type="number" min="1" max="60" step="1" name="frameRate" value="${escapeHtml(vsel("frameRate", vdefs.frameRate || "25"))}" /></label><label class="field"><span>宽</span><input type="number" min="64" max="4096" step="8" name="videoWidth" value="${escapeHtml(vsel("videoWidth", vdefs.videoWidth || "544"))}" /></label><label class="field"><span>高</span><input type="number" min="64" max="4096" step="8" name="videoHeight" value="${escapeHtml(vsel("videoHeight", vdefs.videoHeight || "960"))}" /></label><label class="field"><span>模式</span><select name="mode"><option value="1" ${vsel("mode", vdefs.mode || "1") === "1" ? "selected" : ""}>1 速度快</option><option value="2" ${vsel("mode", vdefs.mode || "1") === "2" ? "selected" : ""}>2 降低穿模</option><option value="3" ${vsel("mode", vdefs.mode || "1") === "3" ? "selected" : ""}>3 特殊身材比例</option></select></label><label class="field"><span>表情强度</span><input type="number" min="0" max="2" step="0.01" name="expressionIntensity" value="${escapeHtml(vsel("expressionIntensity", vdefs.expressionIntensity || "1.0"))}" /></label><label class="field"><span>汝窑幅度</span><input type="number" min="0" max="1" step="0.01" name="ruKilnAmplitude" value="${escapeHtml(vsel("ruKilnAmplitude", vdefs.ruKilnAmplitude || "0.2"))}" /></label><label class="field field-wide"><span>参考视频</span><select name="referenceVideoUrl"><option value="">— 从素材库选择 —</option>${(state.templateVideos || []).map((v) => `<option value="${escapeHtml(v.url)}" ${vsel("referenceVideoUrl", "") === v.url ? "selected" : ""}>${escapeHtml(v.name)}</option>`).join("")}<option value="__custom__" ${!state.templateVideos?.some((v) => v.url === vsel("referenceVideoUrl", "")) && vsel("referenceVideoUrl", "") ? "selected" : ""}>自定义 URL</option></select></label><div id="customVideoUrlField" style="display:${state.templateVideos?.some((v) => v.url === vsel("referenceVideoUrl", "")) || !vsel("referenceVideoUrl", "") ? "none" : "block"}"><label class="field field-wide"><span>自定义视频 URL</span><input name="referenceVideoUrlCustom" value="${escapeHtml(vsel("referenceVideoUrl", ""))}" placeholder="mp4 公网 URL 或 RH 上传文件名" /></label></div>`;
+}
+
+async function renderGenerator() {
+  await loadModelImages();
+  await loadTemplateVideos();
+  if (state.activeGenerator === "video") await loadGeneratedModelImages();
   const product = productById(state.selectedProductId);
+  await loadProductImages(product.id);
+  if (state.activeGenerator === "image" && !state.productReferenceUrls.length && state.productImages.length) {
+    state.productReferenceUrls = [state.productImages[0].url];
+  }
   const productTasks = generationTasks.filter((item) => item.productId === product.id).slice(0, 5);
-  root.innerHTML = `<section class="grid two-col"><div class="panel"><div class="panel-header"><div><h2>AI 生成工作台</h2><p>${state.activeGenerator === "copy" ? "文案生成支持多版本，完成后可在成品库预览、编辑并发布。" : state.activeGenerator === "image" ? "图片生成支持多图版本，完成后进入成品库，可设为主图并发布。" : "视频生成支持脚本确认与封面预览，完成后自动保存到成品库。"}</p></div></div><div class="tabs">${[["image", "图片生成"], ["copy", "文案生成"], ["video", "视频生成"]].map(([key, label]) => `<button class="tab-btn ${state.activeGenerator === key ? "active" : ""}" data-action="generator-tab" data-tab="${key}">${label}</button>`).join("")}</div><form id="generatorForm" class="form-grid" data-action="stop-propagation"><label class="field"><span>选择商品</span><select data-action="choose-product">${products.map((item) => `<option value="${item.id}" ${item.id === product.id ? "selected" : ""}>${item.name}</option>`).join("")}</select></label>${renderGeneratorFields()}</form><div class="button-row" style="margin-top:14px"><button class="primary-btn" data-action="run-generator">开始生成</button><button class="ghost-btn" data-action="go" data-view="tasks">查看任务</button><button class="ghost-btn" data-action="go" data-view="assets">成品库</button></div></div><div class="panel"><div class="panel-header"><div><h2>当前商品上下文</h2><p>生成输入自动读取商品资料。</p></div>${statusPill(product.status)}</div>${thumb(product, "large-thumb")}<div class="info-grid" style="margin-top:14px">${infoBox("商品", product.name)}${infoBox("类目", product.category)}${infoBox("库存", product.stock)}${infoBox("卖点", product.sellingPoints)}</div></div></section><section class="panel"><div class="panel-header"><div><h2>当前商品生成任务</h2><p>任务状态会自动刷新，失败任务可重试。</p></div></div><div class="list">${productTasks.length ? productTasks.map(renderGenerationTaskRow).join("") : "<p class='meta'>还没有生成任务，点击「开始生成」创建。</p>"}</div></section><section class="panel"><div class="panel-header"><div><h2>最近生成成品</h2><p>生成结果不覆盖旧版本，统一进入成品库。</p></div></div><div class="result-grid">${assets.slice(0, 6).map((item) => renderAssetCard(item, true)).join("")}</div></section>`;
+  const platform = product.platforms?.[0] || "抖音";
+  root.innerHTML = `<section class="grid two-col"><div class="panel"><div class="panel-header"><div><h2>AI 生成工作台</h2><p>${state.activeGenerator === "copy" ? "文案生成支持多版本，完成后可在成品库预览、编辑并发布。" : state.activeGenerator === "image" ? "图片生成支持多图版本，完成后进入成品库，可设为主图并发布。" : "视频生成支持脚本确认与封面预览，完成后自动保存到成品库。"}</p></div></div><div class="tabs">${[["image", "图片生成"], ["copy", "文案生成"], ["video", "视频生成"]].map(([key, label]) => `<button class="tab-btn ${state.activeGenerator === key ? "active" : ""}" data-action="generator-tab" data-tab="${key}">${label}</button>`).join("")}</div><form id="generatorForm" class="form-grid" data-action="stop-propagation"><label class="field"><span>选择商品</span><select data-action="choose-product">${products.map((item) => `<option value="${item.id}" ${item.id === product.id ? "selected" : ""}>${item.name}</option>`).join("")}</select></label><input type="hidden" name="platform" value="${escapeHtml(platform)}" />${renderGeneratorFields({ platform, kind: state.activeGenerator })}${(state.activeGenerator === "image" || state.activeGenerator === "video") ? renderProductReferenceImages(product.id, state.activeGenerator) : ""}</form><div class="button-row" style="margin-top:14px"><button class="primary-btn" data-action="run-generator">开始生成</button><button class="ghost-btn" data-action="go" data-view="tasks">查看任务</button><button class="ghost-btn" data-action="go" data-view="assets">成品库</button></div></div><div class="panel"><div class="panel-header"><div><h2>当前商品上下文</h2><p>生成输入自动读取商品资料。</p></div>${statusPill(product.status)}</div>${thumb(product, "large-thumb")}<div class="info-grid" style="margin-top:14px">${infoBox("商品", product.name)}${infoBox("类目", product.category)}${infoBox("库存", product.stock)}${infoBox("卖点", product.sellingPoints)}</div></div></section><section class="panel"><div class="panel-header"><div><h2>当前商品生成任务</h2><p>任务状态会自动刷新，失败任务可重试。</p></div></div><div class="list">${productTasks.length ? productTasks.map(renderGenerationTaskRow).join("") : "<p class='meta'>还没有生成任务，点击「开始生成」创建。</p>"}</div></section><section class="panel"><div class="panel-header"><div><h2>最近生成成品</h2><p>生成结果不覆盖旧版本，统一进入成品库。</p></div></div><div class="result-grid">${assets.slice(0, 6).map((item) => renderAssetCard(item, true)).join("")}</div></section>`;
+}
+
+function setupVideoFormEvents() {
+  const form = document.querySelector("#generatorForm");
+  if (!form) return;
+  const refVideo = form.querySelector("[name=referenceVideoUrl]");
+  const customUrlField = document.getElementById("customVideoUrlField");
+  if (refVideo && customUrlField) {
+    refVideo.addEventListener("change", () => {
+      customUrlField.style.display = refVideo.value === "__custom__" ? "block" : "none";
+    });
+  }
 }
 
 function renderWorkflowRow(wf) {
   const active = wf.nodes.find((node) => !["已成功", "已跳过"].includes(node.status));
   const progress = computeWorkflowProgress(wf);
-  return `<article class="task-item workflow-row ${state.selectedWorkflowId === wf.id ? "selected" : ""}"><div><div class="task-title">${escapeHtml(wf.productName)} · ${escapeHtml(wf.template)}</div><div class="meta">${wf.id} / ${active?.label || "已完成"} / ${wf.updatedAt || wf.createdAt}</div><div class="progress"><span style="--value:${progress}%"></span></div></div><div class="inline-actions">${statusPill(wf.status)}<button class="small-btn" type="button" data-action="select-workflow" data-id="${wf.id}">详情</button><button class="small-btn" type="button" data-action="open-product-desk" data-product="${wf.productId}" data-workflow="${wf.id}">运营台</button></div></article>`;
+  return `<article class="task-item workflow-row ${state.selectedWorkflowId === wf.id ? "selected" : ""}"><div><div class="task-title">${escapeHtml(wf.productName)} · ${escapeHtml(wf.template)}</div><div class="meta">${active?.label || "已完成"} / ${wf.updatedAt || wf.createdAt}</div><div class="progress"><span style="--value:${progress}%"></span></div></div><div class="inline-actions">${statusPill(wf.status)}<button class="small-btn" type="button" data-action="select-workflow" data-id="${wf.id}">详情</button><button class="small-btn" type="button" data-action="open-product-desk" data-product="${wf.productId}" data-workflow="${wf.id}">运营台</button></div></article>`;
 }
 
 function renderWorkflowDetailPanel() {
-  const wf = workflowById(state.selectedWorkflowId) || filterWorkflowInstances()[0];
+  const wf = workflowById(state.selectedWorkflowId) || null;
   if (wf && wf.id !== state.selectedWorkflowId) state.selectedWorkflowId = wf.id;
   if (!wf) {
     return `<div class="panel"><div class="panel-header"><div><h2>流程详情</h2><p>选择左侧流程查看节点与操作。</p></div></div><p class="meta">暂无流程实例。</p></div>`;
   }
-  return `<div class="panel"><div class="panel-header"><div><h2>${escapeHtml(wf.productName)}</h2><p>${escapeHtml(wf.id)} / ${escapeHtml(wf.template)}</p></div>${statusPill(wf.status)}</div><div class="info-grid" style="margin-bottom:14px">${infoBox("进度", `${computeWorkflowProgress(wf)}%`)}${infoBox("创建时间", wf.createdAt)}${infoBox("最近更新", wf.updatedAt)}${infoBox("当前节点", wf.nodes.find((node) => !["已成功", "已跳过"].includes(node.status))?.label || "已完成")}</div>${renderWorkflowNodes(wf)}${renderWorkflowActions(wf)}<div class="button-row" style="margin-top:12px"><button class="ghost-btn" type="button" data-action="open-product-desk" data-product="${wf.productId}" data-workflow="${wf.id}">打开商品运营台</button></div></div>`;
+  return `<div class="panel"><div class="panel-header"><div><h2>${escapeHtml(wf.productName)}</h2><p>${escapeHtml(wf.template)}</p></div>${statusPill(wf.status)}</div><div class="info-grid" style="margin-bottom:14px">${infoBox("进度", `${computeWorkflowProgress(wf)}%`)}${infoBox("创建时间", wf.createdAt)}${infoBox("最近更新", wf.updatedAt)}${infoBox("当前节点", wf.nodes.find((node) => !["已成功", "已跳过"].includes(node.status))?.label || "已完成")}</div>${renderWorkflowNodes(wf)}${renderWorkflowActions(wf)}<div class="button-row" style="margin-top:12px"><button class="ghost-btn" type="button" data-action="open-product-desk" data-product="${wf.productId}" data-workflow="${wf.id}">打开商品运营台</button></div></div>`;
 }
 
 function renderWorkflows() {
@@ -2215,9 +3239,79 @@ function renderTasks() {
   root.innerHTML = `<section class="assets-layout"><div class="panel"><div class="panel-header"><div><h2>生成任务中心</h2><p>统一管理图片、文案、视频异步生成任务。</p></div><div class="inline-actions"><button class="ghost-btn" data-action="go" data-view="generator">发起生成</button><button class="primary-btn" data-action="go" data-view="assets">成品库</button></div></div><div class="info-grid" style="margin-bottom:14px">${infoBox("执行中", activeCount)}${infoBox("失败待重试", failedCount)}${infoBox("任务总数", generationTasks.length)}</div><div class="list">${generationTasks.length ? generationTasks.map(renderGenerationTaskRow).join("") : "<p class='meta'>还没有生成任务。</p>"}</div></div>${renderTaskDetailPanel()}</section>`;
 }
 
-function renderAssets() {
+async function renderAssets() {
+  await loadModelImages();
   const filtered = filterAssetsList(assets);
-  root.innerHTML = `<section class="assets-layout"><div class="panel"><div class="panel-header"><div><h2>商品成品库</h2><p>AI 生成或手动登记的成品，预览满意后可直接发布。</p></div><div class="inline-actions"><button class="ghost-btn" data-action="go" data-view="generator">AI 生成</button><button class="primary-btn" data-action="open-asset-form">登记成品</button></div></div><div class="filter-row">${[["all", "全部"], ["image", "图片"], ["video", "视频"], ["copy", "文案"], ["ready", "待发布"]].map(([key, label]) => `<button class="chip-btn ${state.assetFilter === key ? "active" : ""}" data-action="filter-asset" data-filter="${key}">${label}</button>`).join("")}</div><div class="asset-grid">${filtered.length ? filtered.map((item) => renderAssetCard(item)).join("") : `<div class="empty-state"><h3>还没有成品</h3><p class="meta">可以 AI 生成，或手动登记已有成品。</p><div class="button-row"><button class="primary-btn" data-action="open-asset-form">登记成品</button><button class="ghost-btn" data-action="go" data-view="generator">AI 生成</button></div></div>`}</div></div>${renderAssetPreviewPanel()}</section>`;
+  const modelImgs = state.modelImages || [];
+  root.innerHTML = `<section class="assets-layout"><div class="panel"><div class="panel-header"><div><h2>商品成品库</h2><p>AI 生成或手动登记的成品，预览满意后可直接发布。</p></div><div class="inline-actions"><button class="ghost-btn" data-action="go" data-view="generator">AI 生成</button><button class="primary-btn" data-action="open-asset-form">登记成品</button></div></div><div class="filter-row">${[["all", "全部"], ["image", "图片"], ["video", "视频"], ["copy", "文案"], ["ready", "待发布"]].map(([key, label]) => `<button class="chip-btn ${state.assetFilter === key ? "active" : ""}" data-action="filter-asset" data-filter="${key}">${label}</button>`).join("")}</div><div class="asset-grid">${filtered.length ? filtered.map((item) => renderAssetCard(item)).join("") : `<div class="empty-state"><h3>还没有成品</h3><p class="meta">可以 AI 生成，或手动登记已有成品。</p><div class="button-row"><button class="primary-btn" data-action="open-asset-form">登记成品</button><button class="ghost-btn" data-action="go" data-view="generator">AI 生成</button></div></div>`}</div></div><div class="panel" style="margin-top:14px"><div class="panel-header"><div><h2>模特素材库</h2><p>上传模特全身照，用于换装工作流。</p></div><button class="ghost-btn" data-action="upload-model-images">上传模特图</button></div>${modelImgs.length ? `<div class="ref-image-grid">${modelImgs.map((img) => `<div class="ref-image-item" style="cursor:default"><img src="${img.url}" alt="${escapeHtml(img.name)}"><span class="ref-image-name">${escapeHtml(img.name)}</span><button class="small-btn" data-action="delete-model-image" data-id="${img.id}" style="margin-top:4px">删除</button></div>`).join("")}</div>` : `<p class="meta">暂无模特图。点击「上传模特图」添加。</p>`}</div>${renderAssetPreviewPanel()}</section>`;
+}
+
+async function renderMaterials() {
+  await Promise.all([loadModelImages(), loadTemplateVideos(), loadGeneratedModelImages(), loadAllProductImages()]);
+  if (state.view !== "materials") return;
+  const modelImgs = state.modelImages || [];
+  const tmplVids = state.templateVideos || [];
+  const genImgs = state.generatedModelImages || [];
+  const prodImgs = state.allProductImages || [];
+  root.innerHTML = `<section class="assets-layout"><div class="panel"><div class="panel-header"><div><h2>模特素材库</h2><p>上传模特全身照，用于换装工作流。支持 JPG/PNG。</p></div></div><div class="upload-zone" data-target="model-images"><input type="file" accept="image/*" multiple style="display:none"><div class="upload-icon">📷</div><p><strong>点击或拖拽图片到此处</strong></p><p class="meta">支持 JPG、PNG，可多选</p></div>${
+    modelImgs.length
+      ? `<div class="ref-image-grid" style="margin-top:12px">${modelImgs.map((img) => `<div class="ref-image-item" style="cursor:default"><img src="${img.url}" alt="${escapeHtml(img.name)}"><span class="ref-image-name">${escapeHtml(img.name)}<button class="small-btn" data-action="delete-model-image" data-id="${img.id}" style="margin-left:6px;padding:0 4px;font-size:11px">×</button></span></div>`).join("")}</div>`
+      : ""
+  }</div><div class="panel" style="margin-top:14px"><div class="panel-header"><div><h2>商品原图库</h2><p>新建商品时上传的商品实拍图，按商品归类。</p></div></div>${
+    prodImgs.length
+      ? `<div class="ref-image-grid" style="margin-top:12px">${prodImgs.map((img) => `<div class="ref-image-item" style="cursor:default"><img src="${img.url}" alt="${escapeHtml(img.name)}"><span class="ref-image-name">${escapeHtml(img.name)}<span class="meta" style="margin-left:4px">${escapeHtml(img.productName || "")}</span></span></div>`).join("")}</div>`
+      : `<p class="meta">暂无商品原图。在新建商品时上传，此处自动出现。</p>`
+  }</div><div class="panel" style="margin-top:14px"><div class="panel-header"><div><h2>已换装模特图</h2><p>AI 换装完成后自动存入，可直接用于视频生成。</p></div></div>${
+    genImgs.length
+      ? `<div class="ref-image-grid" style="margin-top:12px">${genImgs.map((img) => `<div class="ref-image-item" style="cursor:default"><img src="${img.url}" alt="${escapeHtml(img.name)}" style="border:2px solid var(--green)"><span class="ref-image-name">${escapeHtml(img.name)}<span class="meta" style="margin-left:4px">${escapeHtml(img.productName || "")}</span><button class="small-btn" data-action="delete-generated-model-image" data-id="${img.id}" style="margin-left:6px;padding:0 4px;font-size:11px">×</button></span></div>`).join("")}</div>`
+      : `<p class="meta">暂无已换装模特图。先运行图片生成（换装），结果将自动存入此处。</p>`
+  }</div><div class="panel" style="margin-top:14px"><div class="panel-header"><div><h2>模板视频库</h2><p>上传模板参考视频，用于视频生成工作流。支持 MP4。</p></div></div><div class="upload-zone" data-target="template-videos"><input type="file" accept="video/*" multiple style="display:none"><div class="upload-icon">🎬</div><p><strong>点击或拖拽视频到此处</strong></p><p class="meta">支持 MP4，可多选</p></div>${
+    tmplVids.length
+      ? `<div class="ref-image-grid" style="margin-top:12px">${tmplVids.map((v) => `<div class="ref-image-item" style="cursor:default"><video src="${v.url}" style="width:100%;height:160px;object-fit:cover;border-radius:8px" controls></video><span class="ref-image-name">${escapeHtml(v.name)}<button class="small-btn" data-action="delete-template-video" data-id="${v.id}" style="margin-left:6px;padding:0 4px;font-size:11px">×</button></span></div>`).join("")}</div>`
+      : ""
+}</div></section>`;
+  setupMaterialsDragDrop();
+}
+
+function setupMaterialsDragDrop() {
+  document.querySelectorAll(".assets-layout .upload-zone").forEach((zone) => {
+    const fileInput = zone.querySelector("input[type=file]");
+    zone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      zone.classList.add("drag-over");
+    });
+    zone.addEventListener("dragleave", () => {
+      zone.classList.remove("drag-over");
+    });
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("drag-over");
+      handleMaterialsFiles(e.dataTransfer.files, zone.dataset.target);
+    });
+    zone.addEventListener("click", () => {
+      if (fileInput) fileInput.click();
+    });
+    if (fileInput) {
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) {
+          handleMaterialsFiles(fileInput.files, zone.dataset.target);
+          fileInput.value = "";
+        }
+      });
+    }
+  });
+}
+
+async function handleMaterialsFiles(files, target) {
+  if (!API_ENABLED) { alert("演示模式不可上传"); return; }
+  const reader = (file) => new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve({ name: file.name, src: r.result }); r.readAsDataURL(file); });
+  const items = Array.from(files).map((f) => reader(f));
+  state.uploadedImages = await Promise.all(items);
+  if (target === "model-images") {
+    await uploadModelImages();
+  } else if (target === "template-videos") {
+    await uploadTemplateVideos();
+  }
 }
 
 function renderPublish() {
@@ -2233,7 +3327,7 @@ function renderPublish() {
       (item) =>
         `<article class="task-item"><div><div class="task-title">${escapeHtml(productById(item.productId).name)} / ${escapeHtml(item.platform)}</div><div class="meta">${escapeHtml(item.taskType)} / ${escapeHtml(item.taskId)} / ${escapeHtml(item.capability)}</div><div class="meta task-error">${escapeHtml(item.reason)}</div></div>${statusPill("失败")}</article>`
     )
-    .join("")}</div></section>` : ""}<section class="panel"><div class="panel-header"><div><h2>发布日历</h2><p>按账号排期查看待发布任务。</p></div></div><div class="grid three-col">${[["今天", publishTasksBySlot("今天")], ["明天", publishTasksBySlot("明天")], ["本周", publishTasksBySlot("本周")]].map(([day, tasks]) => `<div class="info-box calendar-box"><span>${day}</span><strong>${tasks.length} 个任务</strong><div class="calendar-list">${tasks.slice(0, 4).map((task) => `<div class="meta">${escapeHtml(productById(task.productId).name)} · ${escapeHtml(task.account)} · ${escapeHtml(task.time)}</div>`).join("") || "<p class='meta' style='margin:0'>暂无</p>"}</div></div>`).join("")}</div>${selectedTask ? `<div style="margin-top:14px">${renderPublishTaskRow(selectedTask)}</div>` : ""}</section>${renderPlatformCapabilities()}`;
+    .join("")}</div></section>` : ""}<section class="panel"><div class="panel-header"><div><h2>发布日历</h2><p>按账号排期查看待发布任务。</p></div></div><div class="grid three-col">${[["今天", publishTasksBySlot("今天")], ["明天", publishTasksBySlot("明天")], ["本周", publishTasksBySlot("本周")]].map(([day, tasks]) => `<div class="info-box calendar-box"><span>${day}</span><strong>${tasks.length} 个任务</strong><div class="calendar-list">${tasks.slice(0, 4).map((task) => `<div class="meta">${escapeHtml(productById(task.productId).name)} · ${escapeHtml(task.account)} · ${escapeHtml(task.time)}</div>`).join("") || "<p class='meta' style='margin:0'>暂无</p>"}</div></div>`).join("")}</div>${selectedTask ? `<div style="margin-top:14px">${renderPublishTaskRow(selectedTask)}</div>` : ""}</section>`;
 }
 
 function renderAccounts() {
@@ -2313,21 +3407,28 @@ function renderTemplateAbPanel() {
   return `<section class="panel template-ab-panel"><div class="panel-header"><div><h2>模板 A/B 表现</h2><p>按文案类型、账号人设与平台统计发布成功率，辅助优化生成模板。</p></div></div><ul class="hint-list compact">${(report.hints || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${rows.length ? renderDataTable(["文案类型", "人设", "平台", "发布数", "成功率", "综合分"], rows) : "<p class='meta'>暂无 A/B 数据，发布成功后会自动累计。</p>"}</section>`;
 }
 
-function render() {
+async function render() {
   if (state.view === "dashboard") renderDashboard();
-  if (state.view === "products") renderProducts();
-  if (state.view === "generator") renderGenerator();
-  if (state.view === "tasks") renderTasks();
-  if (state.view === "workflows") renderWorkflows();
-  if (state.view === "publish") renderPublish();
-  if (state.view === "assets") renderAssets();
-  if (state.view === "accounts") renderAccounts();
-  if (state.view === "inventory") renderInventory();
-  if (state.view === "data") renderData();
+  else if (state.view === "workflow") renderWorkflow();
+  else if (state.view === "products") renderProducts();
+  else if (state.view === "publish") renderPublish();
+  else if (state.view === "materials") await renderMaterials();
+  else if (state.view === "accounts") renderAccounts();
+  else if (state.view === "inventory") renderInventory();
   mountProductCreateModal();
   mountAssetCreateModal();
   mountPublishModal();
   mountAccountModal();
+  if (!state.presetFormOpen) {
+    const presetModal = document.querySelector("#presetManagerModalWrap");
+    if (presetModal) presetModal.remove();
+  }
+  if (state.view === "workflow" && !state.selectedProductId) {
+    setTimeout(setupDragDrop, 50);
+  }
+  if (state.view === "generator" && state.activeGenerator === "video") {
+    setTimeout(setupVideoFormEvents, 50);
+  }
 }
 
 document.addEventListener("click", async (event) => {
@@ -2338,21 +3439,104 @@ document.addEventListener("click", async (event) => {
   if (action === "toggle-product-edit") {
     state.productDeskExpanded = !state.productDeskExpanded;
     state.productEditing = state.productDeskExpanded;
-    renderProducts();
+    renderWorkflow();
     return;
   }
   if (action === "open-product-desk") {
+    await loadProductImages(target.dataset.product);
     openProductDesk(target.dataset.product, {
       assetId: target.dataset.asset,
       taskId: target.dataset.task,
-      workflowId: target.dataset.workflow,
+      platformWorkflowId: target.dataset.platformWorkflow,
     });
     return;
   }
+  if (action === "open-platform-workflow") {
+    await loadProductImages(target.dataset.product);
+    openPlatformWorkflow(target.dataset.product, target.dataset.platformWorkflow, target.dataset.platform);
+    return;
+  }
+  if (action === "select-pw-platform") {
+    state.workflowPlatformTab = target.dataset.platform;
+    const list = getProductPlatformWorkflowsLocal(state.selectedProductId);
+    const inst = list.find((item) => item.platform === target.dataset.platform);
+    state.selectedPlatformWorkflowId = inst?.id || "";
+    renderWorkflow();
+    return;
+  }
+  if (action === "start-platform-workflow") {
+    const platform = target.dataset.platform || state.workflowPlatformTab;
+    if (API_ENABLED) {
+      const ok = await runApiAction("/api/actions/platform-workflows/start", {
+        productId: state.selectedProductId,
+        platforms: [platform],
+      });
+      if (ok) {
+        syncTaskPolling();
+        showToast(`已启动${platform}工作流。`);
+        renderWorkflow();
+      }
+    } else showToast("请连接本地服务后启动工作流。");
+    return;
+  }
+  if (action === "pw-confirm") {
+    const path = `/api/actions/platform-workflows/${target.dataset.id}/confirm`;
+    if (API_ENABLED) {
+      const ok = await runApiAction(path, {});
+      if (ok) {
+        syncTaskPolling();
+        showToast("工作流已更新。");
+        renderWorkflow();
+      }
+    } else showToast("请连接本地服务。");
+    return;
+  }
+  if (action === "pw-advance" || action === "pw-skip" || action === "pw-retry") {
+    const id = target.dataset.id;
+    const path =
+      action === "pw-skip"
+        ? `/api/actions/platform-workflows/${id}/skip`
+        : action === "pw-retry"
+          ? `/api/actions/platform-workflows/${id}/retry`
+          : `/api/actions/platform-workflows/${id}/advance`;
+    if (API_ENABLED) {
+      const ok = await runApiAction(path, {});
+      if (ok) {
+        syncTaskPolling();
+        showToast("工作流已更新。");
+        renderWorkflow();
+      }
+    } else showToast("请连接本地服务。");
+    return;
+  }
+  if (action === "pw-observe-check") {
+    if (API_ENABLED) {
+      const ok = await runApiAction(`/api/actions/platform-workflows/${target.dataset.id}/observe-check`, {});
+      if (ok) {
+        showToast("已检查平台同步状态。");
+        renderWorkflow();
+      }
+    } else showToast("请连接本地服务。");
+    return;
+  }
+  if (action === "pw-execute-publish") {
+    if (API_ENABLED) {
+      const ok = await runApiAction(`/api/actions/platform-workflows/${target.dataset.id}/execute-publish`, {});
+      if (ok) {
+        showToast("矩阵发布接口已调用。");
+        renderWorkflow();
+      }
+    } else showToast("请连接本地服务。");
+    return;
+  }
+  if (action === "export-listing") {
+    if (API_ENABLED) {
+      window.open(`/api/actions/listing-tasks/${target.dataset.id}/export`, "_blank");
+    } else showToast("请连接本地服务后导出。");
+    return;
+  }
   if (action === "open-workflows") {
-    state.workflowFilter = "failed";
-    state.selectedWorkflowId = target.dataset.workflow || "";
-    setView("workflows");
+    openProductDesk(target.dataset.product, { platformWorkflowId: target.dataset.workflow });
     return;
   }
   if (action === "open-publish-failures") {
@@ -2761,7 +3945,98 @@ document.addEventListener("click", async (event) => {
     showToast("请连接本地服务后重试。");
     return;
   }
-  if (action === "open-product-form") { state.productFormOpen = true; mountProductCreateModal(); return; }
+  if (action === "new-product") {
+    startNewProductFlow();
+    return;
+  }
+  if (action === "open-product-form") { startNewProductFlow(); return; }
+  if (action === "toggle-launch-platform") {
+    syncLaunchDraftFromForm();
+    const platform = target.value || target.dataset?.platform;
+    if (platform) {
+      state.launchPlatforms = state.launchPlatforms.includes(platform)
+        ? state.launchPlatforms.filter((p) => p !== platform)
+        : [...state.launchPlatforms, platform];
+      render();
+    }
+    return;
+  }
+  if (action === "submit-launch-form") {
+    await handleLaunchFormSubmit();
+    return;
+  }
+  if (action === "trigger-upload") {
+    document.getElementById("fileInput")?.click();
+    return;
+  }
+  if (action === "remove-upload-image") {
+    const index = Number(target.dataset.index);
+    state.uploadedImages = state.uploadedImages.filter((_, i) => i !== index);
+    renderUploadPreview();
+    return;
+  }
+  if (action === "upload-model-images") {
+    if (!API_ENABLED) { alert("演示模式不可上传"); return; }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      const reader = (file) => new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve({ name: file.name, src: r.result }); r.readAsDataURL(file); });
+      state.uploadedImages = await Promise.all(files.map(reader));
+      await uploadModelImages();
+    };
+    input.click();
+    return;
+  }
+  if (action === "upload-video-ref-image") {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = reader.result;
+        state.videoRefUploadedImages.push({ url, name: file.name });
+        state.productReferenceUrls = [url];
+        saveGeneratorFormDraft();
+        render();
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+    return;
+  }
+  if (action === "upload-template-videos") {
+    if (!API_ENABLED) { alert("演示模式不可上传"); return; }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/*";
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      const reader = (file) => new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve({ name: file.name, src: r.result }); r.readAsDataURL(file); });
+      state.uploadedImages = await Promise.all(files.map(reader));
+      await uploadTemplateVideos();
+    };
+    input.click();
+    return;
+  }
+  if (action === "delete-model-image") {
+    await deleteModelImage(target.dataset.id);
+    return;
+  }
+  if (action === "delete-template-video") {
+    await deleteTemplateVideo(target.dataset.id);
+    return;
+  }
+  if (action === "delete-generated-model-image") {
+    await deleteGeneratedModelImage(target.dataset.id);
+    return;
+  }
   if (action === "close-product-form") { state.productFormOpen = false; mountProductCreateModal(); return; }
   if (action === "open-asset-form") { state.assetFormOpen = true; mountAssetCreateModal(); return; }
   if (action === "close-asset-form") { state.assetFormOpen = false; mountAssetCreateModal(); return; }
@@ -2786,32 +4061,55 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "publish-asset") {
-    const ok = await publishAsset(target.dataset.id);
-    if (ok) {
-      showToast("发布任务已创建。");
+    const result = await publishAsset(target.dataset.id);
+    if (result.ok) {
+      showToast(result.message || "发布任务已创建。");
       render();
+    } else {
+      showToast(result.message || "发布失败：成品状态异常，请确认已生成完毕。");
     }
     return;
   }
-  if (action === "select-product") { state.selectedProductId = target.dataset.id; state.productEditing = false; setView("products"); return; }
-  if (action === "filter-product") { state.productFilter = target.dataset.status; renderProducts(); return; }
-  if (action === "generator-tab") { state.activeGenerator = target.dataset.tab; if (state.view === "generator") renderGenerator(); else renderProducts(); return; }
+  if (action === "select-product") { state.selectedProductId = target.dataset.id; state.workflowLaunchOpen = false; state.productEditing = false; state.productReferenceUrls = []; state.selectedModelImageUrls = []; state.selectedSlot3Urls = []; await loadProductImages(target.dataset.id); setView("workflow"); return; }
+  if (action === "select-product-list") { state.selectedProductId = target.dataset.id; renderProducts(); return; }
+  if (action === "filter-product") { state.productFilter = target.dataset.filter || target.dataset.status || "all"; renderProducts(); return; }
+  if (action === "select-slot-img") {
+    const slot = target.dataset.slot;
+    const url = target.dataset.url;
+    if (slot === "slot1_model") { state.selectedModelImageUrls = [url]; }
+    else if (slot === "slot2_product") { state.productReferenceUrls = [url]; }
+    else if (slot === "slot3_extra") { state.selectedSlot3Urls = state.selectedSlot3Urls[0] === url ? [] : [url]; }
+    else if (slot === "slot_ref_video") { state.productReferenceUrls = [url]; }
+    saveGeneratorFormDraft();
+    render();
+    return;
+  }
+  if (action === "generator-tab") {
+    state.activeGenerator = target.dataset.tab;
+    state.selectedGenerationTemplateId = "";
+    state.generatorFormDraft = {};
+    if (state.view === "generator") renderGenerator();
+    else renderProducts();
+    return;
+  }
   if (action === "run-generator") {
     const product = productById(state.selectedProductId);
-    const formParams = document.querySelector("#generatorForm") ? readGeneratorForm() : defaultGenerationParams(state.activeGenerator, product);
-    const payload = { productId: state.selectedProductId, kind: state.activeGenerator, ...formParams };
+    const form = document.querySelector("#generatorForm");
+    const formKind = form?.querySelector("[data-action='generation-template-change']")?.dataset.kind || state.activeGenerator;
+    const formParams = form ? readGeneratorForm() : defaultGenerationParams(formKind, product);
+    const payload = { productId: state.selectedProductId, kind: formKind, ...formParams };
     if (API_ENABLED) {
       const ok = await runApiAction("/api/actions/generate", payload);
       if (ok) {
         syncTaskPolling();
-        showToast(`${GENERATION_KIND_LABEL[state.activeGenerator] || "生成"}任务已创建。`);
+        showToast(`${GENERATION_KIND_LABEL[formKind] || "生成"}任务已创建。`);
         if (state.view === "generator") renderGenerator();
         else renderProducts();
       }
       return;
     }
-    createLocalGenerationTask(state.selectedProductId, state.activeGenerator, formParams);
-    showToast(`${GENERATION_KIND_LABEL[state.activeGenerator] || "生成"}任务已创建。`);
+    createLocalGenerationTask(state.selectedProductId, formKind, formParams);
+    showToast(`${GENERATION_KIND_LABEL[formKind] || "生成"}任务已创建。`);
     if (state.view === "generator") renderGenerator();
     else renderProducts();
     return;
@@ -2912,6 +4210,94 @@ document.addEventListener("click", async (event) => {
     else renderPublish();
     return;
   }
+  if (action === "save-preset") {
+    const platform = target.dataset.platform || state.workflowPlatformTab || "";
+    const kind = target.dataset.kind || state.activeGenerator || "";
+    const form = document.querySelector("#generatorForm");
+    if (!form) { showToast("请先生成一次再保存预设。"); return; }
+    const data = new FormData(form);
+    const templateId = String(data.get("generationTemplateId") || state.selectedGenerationTemplateId || "").trim();
+    const params = {};
+    if (kind === "image") {
+      params.imageType = String(data.get("imageType") || "商品主图");
+      params.imageSize = String(data.get("imageSize") || "1:1 平台主图");
+      params.imageCount = Number(data.get("imageCount") || 4);
+      params.extraPrompt = String(data.get("extraPrompt") || "").trim();
+    } else if (kind === "copy") {
+      params.copyType = String(data.get("copyType") || "发布文案");
+      params.platform = String(data.get("platform") || platform);
+      params.versionCount = Number(data.get("versionCount") || 3);
+      params.extraPrompt = String(data.get("extraPrompt") || "").trim();
+      params.accountId = String(data.get("accountId") || "").trim();
+    } else if (kind === "video") {
+      params.videoType = String(data.get("videoType") || "商品展示视频");
+      params.videoRatio = String(data.get("videoRatio") || "9:16 竖版");
+      params.videoDuration = String(data.get("videoDuration") || "7 秒");
+      params.extraPrompt = String(data.get("extraPrompt") || "").trim();
+      params.referenceVideoUrl = data.get("referenceVideoUrl") === "__custom__" ? String(data.get("referenceVideoUrlCustom") || "").trim() : String(data.get("referenceVideoUrl") || "").trim();
+      params.seconds = String(data.get("seconds") || "").trim();
+      params.frameRate = String(data.get("frameRate") || "").trim();
+      params.videoWidth = String(data.get("videoWidth") || "").trim();
+      params.videoHeight = String(data.get("videoHeight") || "").trim();
+      params.mode = String(data.get("mode") || "").trim();
+      params.expressionIntensity = String(data.get("expressionIntensity") || "").trim();
+      params.ruKilnAmplitude = String(data.get("ruKilnAmplitude") || "").trim();
+    }
+    const name = prompt("命名此预设（例如：抖音白底主图 4 张）:", `${platform} ${kind}预设`);
+    if (!name || !name.trim()) return;
+    saveGenerationPreset(name.trim(), platform, kind, templateId, params);
+    showToast(`预设「${name.trim()}」已保存。`);
+    renderWorkflow();
+    return;
+  }
+  if (action === "open-preset-form") {
+    state.presetFormOpen = true;
+    state.presetPlatform = target.dataset.platform || "";
+    state.presetKind = target.dataset.kind || "";
+    const modal = document.createElement("div");
+    modal.id = "presetManagerModalWrap";
+    modal.innerHTML = renderPresetManagerModal();
+    document.body.appendChild(modal);
+    return;
+  }
+  if (action === "close-preset-form") {
+    const modal = document.querySelector("#presetManagerModalWrap");
+    if (modal) modal.remove();
+    state.presetFormOpen = false;
+    return;
+  }
+  if (action === "apply-preset") {
+    const presetId = target.value;
+    if (!presetId) return;
+    const preset = state.generationPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    state.selectedGenerationTemplateId = preset.templateId || state.selectedGenerationTemplateId;
+    state.generatorFormDraft = { ...(preset.params || {}), generationTemplateId: preset.templateId || "" };
+    showToast(`已加载预设「${preset.name}」。`);
+    renderWorkflow();
+    return;
+  }
+  if (action === "load-preset") {
+    const preset = state.generationPresets.find((item) => item.id === target.dataset.id);
+    if (!preset) return;
+    state.selectedGenerationTemplateId = preset.templateId || state.selectedGenerationTemplateId;
+    state.generatorFormDraft = { ...(preset.params || {}), generationTemplateId: preset.templateId || "" };
+    const modal = document.querySelector("#presetManagerModalWrap");
+    if (modal) modal.remove();
+    state.presetFormOpen = false;
+    showToast(`已加载预设「${preset.name}」。`);
+    renderWorkflow();
+    return;
+  }
+  if (action === "delete-preset") {
+    if (!confirm("确定删除此预设？")) return;
+    deleteGenerationPreset(target.dataset.id);
+    const modal = document.querySelector("#presetManagerModalWrap");
+    if (modal) modal.innerHTML = renderPresetManagerModal();
+    else renderWorkflow();
+    showToast("预设已删除。");
+    return;
+  }
   if (action === "save-template") showToast("MVP 已记录该操作入口，后续接入真实服务。");
 });
 
@@ -2937,10 +4323,16 @@ document.addEventListener("submit", async (event) => {
       if (!productId) throw new Error("Create failed");
       state.productFormOpen = false;
       state.selectedProductId = productId;
+      state.workflowLaunchOpen = false;
       state.productEditing = false;
       mountProductCreateModal();
-      showToast(payload.autoStart ? `商品「${payload.name || "未命名商品"}」已创建，全自动流程已启动。` : `商品「${payload.name || "未命名商品"}」已创建。`);
-      setView("products");
+      showToast(`商品「${payload.name || "未命名商品"}」已创建。`);
+      const firstPw = getProductPlatformWorkflowsLocal(productId)[0];
+      if (firstPw) {
+        state.selectedPlatformWorkflowId = firstPw.id;
+        state.workflowPlatformTab = firstPw.platform;
+      }
+      setView("workflow");
     } catch (error) { showToast("商品创建失败，请检查表单后重试。"); }
     return;
   }
@@ -2950,7 +4342,7 @@ document.addEventListener("submit", async (event) => {
       if (!ok) throw new Error("Update failed");
       state.productEditing = false;
       showToast("商品资料已保存。");
-      renderProducts();
+      renderWorkflow();
     } catch (error) { showToast("商品保存失败，请检查表单后重试。"); }
     return;
   }
@@ -3001,11 +4393,56 @@ document.addEventListener("submit", async (event) => {
   }
 });
 
-document.addEventListener("change", (event) => {
+document.addEventListener("change", async (event) => {
+  if (event.target.id === "fileInput") {
+    handleFileUpload(event.target.files);
+    return;
+  }
+  if (event.target.matches("[data-action='product-search']")) {
+    state.productSearch = event.target.value;
+    if (state.view === "products") renderProducts();
+    return;
+  }
   if (event.target.matches("[data-action='choose-product']")) {
     state.selectedProductId = event.target.value;
+    state.workflowLaunchOpen = false;
+    state.productReferenceUrls = [];
+    state.selectedModelImageUrls = [];
+    state.selectedSlot3Urls = [];
+    state.videoRefUploadedImages = [];
+    await loadProductImages(event.target.value);
     if (state.view === "generator") renderGenerator();
     else renderProducts();
+    return;
+  }
+  if (event.target.matches("[data-action='generation-template-change']")) {
+    state.selectedGenerationTemplateId = event.target.value;
+    const form = event.target.closest("form");
+    if (form) {
+      const platformInput = form.querySelector("[name='platform']");
+      const platform = event.target.dataset.platform || (platformInput ? platformInput.value : state.workflowPlatformTab || "");
+      const kind = event.target.dataset.kind || state.activeGenerator || "";
+      if (platform && kind) setLastTemplateId(platform, kind, event.target.value);
+    }
+    if (state.view === "workflow") {
+      saveGeneratorFormDraft();
+      renderWorkflow();
+    }
+    return;
+  }
+  if (event.target.matches('input[name="refImageUrl"]')) {
+    state.productReferenceUrls = readReferenceImageUrls();
+    return;
+  }
+  if (event.target.matches("[data-action='apply-preset']")) {
+    const presetId = event.target.value;
+    if (!presetId) return;
+    const preset = state.generationPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    state.selectedGenerationTemplateId = preset.templateId || state.selectedGenerationTemplateId;
+    state.generatorFormDraft = { ...(preset.params || {}), generationTemplateId: preset.templateId || "" };
+    showToast(`已加载预设「${preset.name}」。`);
+    renderWorkflow();
     return;
   }
   if (event.target.matches("[data-action='asset-kind-change']")) {
@@ -3017,16 +4454,17 @@ document.addEventListener("change", (event) => {
   }
 });
 
-document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+document
+  .querySelectorAll(".nav-item[data-view]")
+  .forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 
 async function initApp() {
   await loadRemoteState();
-  await loadWorkflowTemplates();
-  await loadPlatformCapabilities();
-  await loadAnalytics();
+  cleanupStaleGenerationTasks();
+  await loadGenerationTemplates();
   await loadCopyProvider();
-  renderTopActions();
-  render();
+  await loadModelImages();
+  setView(state.view);
 }
 
 initApp();

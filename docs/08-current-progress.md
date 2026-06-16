@@ -2,64 +2,54 @@
 
 ## 1. 项目定位
 
-AI 电商自动运营系统，围绕商品完成：
+AI 电商自动运营系统，**核心半自动工作流**见 [09-core-platform-workflow-design.md](./09-core-platform-workflow-design.md)。
 
-```text
-待办 → 商品运营台 → 全自动流程 → 发布中心 → 库存联动 → 平台 API → 数据回流
-```
+## 2. 界面（v1.8.0）
 
-## 2. 已完成
+**一级导航**：今日工作台、平台工作流、发布任务；二级：平台账号、库存。
 
-- M1–M11：生成、流程、发布、库存、平台适配、数据中心
-- **M12**：自动化运营 V1（完整链路 + 批量 + 多账号矩阵）
-- **M13 V1**：策略优化（智能策略面板、差异化文案、数据中心策略总览、批量 SKU 推荐流程）
-- **M13 扩展**：流程编排器 + 模板 A/B 分析
+刷新：**Ctrl+F5**（`app.js?v=1.8.0`）。
 
-## 3. 运行方式
+## 3. M14 接口已全部接通（演示模式默认开启）
+
+无真实 OpenAPI 密钥/账号时，`PLATFORM_DEMO_MODE` 默认开启（设 `PLATFORM_DEMO_MODE=0` 关闭），仍走完整调用链并返回可联调结果。
+
+| 链路 | 接口层 | 行为 |
+|------|--------|------|
+| 生成 | RunningHub / 模板 | 按 `generationTemplateId` 路由 endpoint；任务带 `platformWorkflowId` |
+| 抖音上架 | `addV2` + `launch` 载荷 | `store-listing-service` → `douyin` adapter → 回写 `externalId` |
+| 淘宝/小红书上架 | 各平台 `invokePlatformListingApi` | 同上 |
+| 矩阵发布 | `dispatchPublish` | 演示账号自动注入；节点内批量 `execute-publish` |
+| 授权号橱窗 / 联盟 | `observe-check` | `platform-observe-service` 检查并等待确认 |
+| 导出兜底 | `GET .../listing-tasks/:id/export` | 上架包 JSON |
+
+启动工作流时自动注入演示账号（主店 + 授权号 + 达人号），**不要求事先在后台绑号**。
+
+## 4. 平台工作流节点操作
+
+- **生成**：模板下拉 + 参数 → `/api/actions/generate`
+- **上架**：`pw-advance` 自动建草稿并调上架 API；可导出上架包
+- **观测**：`pw-observe-check` → 确认并继续
+- **矩阵发布**：`pw-advance` 或 `pw-execute-publish` 调发布 API
+
+## 5. 运行
 
 ```bash
 npm start
 ```
 
-访问 http://localhost:4173 ，**Ctrl+F5** 刷新（`app.js?v=1.4.0`）。
+http://localhost:4173
 
-## 4. 全自动运营（待办页）
+## 6. 环境变量（可选）
 
-- **新建商品**：勾选「创建后自动跑全流程」
-- **批量启动**：待办页「一键全自动」，支持多账号矩阵与确认后自动上架发布
-- **人工介入点**：成品预览确认、异常重试/跳过（无审核中心）
+| 变量 | 说明 |
+|------|------|
+| `PLATFORM_DEMO_MODE=0` | 关闭演示，无密钥时上架/发布可能失败并走导出 |
+| `DOUYIN_OPEN_API_KEY` | 抖店真实密钥（占位联调） |
+| `RUNNINGHUB_API_KEY` | 真实生图/视频 |
 
-API：
+## 7. 下一步
 
-- `POST /api/actions/auto-ops/start` — 批量启动全自动运营
-- `POST /api/actions/products` + `autoStart: true` — 创建并自动启动
-- `GET /api/auto-ops/eligible` — 可启动商品列表
-
-## 5. 数据中心（更多 → 数据）
-
-- 商品表现、自动化成功率、成品排行、账号效果、优化建议
-- **策略总览**：高表现成品、运营机会、批量启动推荐流程
-- API：`GET /api/analytics/summary`、`GET /api/strategy/summary`
-
-## 6. 智能策略（商品运营台 + 数据中心）
-
-- **商品运营台**：推荐成品 / 流程 / 账号匹配；一键差异化文案（融入 A/B 优胜模板）；采纳主图
-- **数据中心**：批量按推荐模板启动 SKU 流程；模板 A/B 表现排行
-- API：
-  - `GET /api/strategy/product/:id` — 单商品策略
-  - `POST /api/actions/strategy/apply` — 执行策略动作
-  - `POST /api/actions/strategy/batch-apply` — 批量启动推荐流程
-  - `GET /api/analytics/template-ab` — 模板 A/B 报告
-
-## 7. 流程编排器（更多 → 自动化流程）
-
-- 从节点库组合自定义流程（生成 / 确认 / 上架 / 发布）
-- 保存后在批量启动、商品运营台模板选择中可用
-- API：
-  - `GET /api/workflows/node-catalog` — 可用节点
-  - `POST /api/workflows/custom-templates` — 保存自定义模板
-  - `DELETE /api/workflows/custom-templates/:id` — 删除模板
-
-## 8. 下一步
-
-- 可视化拖拽编排、跨商品策略实验
+- 对接真实抖店 OpenAPI 实测参数
+- 原图批量上传字段（启动页左栏）
+- 数据回流接统计 API

@@ -61,21 +61,22 @@ M2 引入，用于异步 AI 生成（图片 / 文案 / 视频统一抽象）。
 
 ## 9. WorkflowInstance 自动化流程实例
 
-M8+ 引入流程编排。
+M8+ 引入流程编排（商品维度：生成→确认→发布）。
+
+M14 将引入 **PlatformWorkflow**（平台维度：录入→生图→生视频→上架→矩阵发布），见 [09-core-platform-workflow-design.md](./09-core-platform-workflow-design.md) §9、§12。
 
 ## 10. OperationLog 操作日志
 
 动作类型：generation, asset, publish, general
 
-## 11. 与界面的对应关系
+## 11. 与界面的对应关系（收敛后）
 
-| 数据实体 | 主要展示位置 | 说明 |
-|----------|--------------|------|
-| Product | 待办、商品运营台、发布中心 | 一切操作的锚点 |
-| Asset | 运营台中栏、全量成品库 | 日常在运营台预览发布 |
-| GenerationTask | 运营台左栏、待办、生成任务（更多） | 页内看本商品任务，全局排查进「更多」 |
-| ListingTask | 运营台右栏、发布中心 | 单商品草稿 + 全局列表 |
-| PublishTask | 运营台右栏、发布中心、待办 | 待发布成品会推待办 |
-| PlatformAccount | 平台账号（更多） | 配置类，非日常主路径 |
-| Inventory | 库存（更多）、待办预警 | 影响发布拦截 |
-| OperationLog | 运营台折叠区 | 按商品查看 |
+| 数据实体 | 主要展示位置 |
+|----------|--------------|
+| Product | 工作台、商品运营台、发布任务 |
+| Asset | 运营台中栏预览 |
+| GenerationTask | 运营台左栏（本商品任务） |
+| ListingTask / PublishTask | 运营台右栏 + 发布任务 |
+| PlatformAccount / Inventory | 必要配置导航 |
+| WorkflowInstance / 策略 / 分析 | **仅后端**，M14 工作流页接入 |
+| OperationLog | 运营台折叠区 |
