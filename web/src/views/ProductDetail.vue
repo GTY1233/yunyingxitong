@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, type NewProduct, type ProductDetail } from "../api";
+import WorkflowPanel from "../components/WorkflowPanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -148,6 +149,8 @@ async function remove() {
         <div class="cap">[{{ a.kind }}] {{ a.name }}</div>
       </div>
     </div>
+
+    <WorkflowPanel :product-id="product.id" />
 
     <el-dialog v-model="dialog" title="编辑商品" width="520px">
       <el-form label-width="92px">

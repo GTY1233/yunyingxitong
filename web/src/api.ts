@@ -82,9 +82,42 @@ export interface Workbench {
   missingMedia: { id: string; displayCode?: string; name: string; missing: string[] }[];
 }
 
+export interface WorkflowNode {
+  id: string;
+  nodeKey: string;
+  seq: number;
+  label: string;
+  type: string;
+  kind?: string;
+  status: string;
+  error?: string;
+}
+
+export interface Workflow {
+  id: string;
+  productId: string;
+  platform: string;
+  template?: string;
+  status?: string;
+  currentNodeId?: string;
+  progress: number;
+  nodes: WorkflowNode[];
+}
+
 export const api = {
   getStats: () => request<DashboardStats>("/api/v2/stats"),
   getWorkbench: () => request<Workbench>("/api/v2/workbench"),
+  listWorkflows: (productId: string) =>
+    request<Workflow[]>(`/api/v2/products/${productId}/workflows`),
+  createWorkflow: (productId: string, platform: string) =>
+    request<Workflow>("/api/v2/workflows", {
+      method: "POST",
+      body: JSON.stringify({ productId, platform }),
+    }),
+  workflowAction: (workflowId: string, nodeId: string, action: string) =>
+    request<Workflow>(`/api/v2/workflows/${workflowId}/nodes/${nodeId}/${action}`, {
+      method: "POST",
+    }),
   listAssets: (kind?: string) =>
     request<AssetWithProduct[]>(`/api/v2/assets${kind ? `?kind=${kind}` : ""}`),
   listProducts: () => request<Product[]>("/api/v2/products"),
