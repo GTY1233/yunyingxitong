@@ -13,7 +13,9 @@
       "build/**",
       "docs/**",
       "*.min.js",
-      ".workflow-out/**"
+      ".workflow-out/**",
+      "web/**",
+      "dist-web/**"
     ]
   },
   "formatter": {
