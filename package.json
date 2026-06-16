@@ -3,8 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI ecommerce operations automation system MVP",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
-    "check": "node scripts/check-js.js"
+    "check": "node scripts/check-js.js",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
   }
 }

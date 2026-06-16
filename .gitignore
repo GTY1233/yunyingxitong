@@ -9,3 +9,27 @@ build/
 *.log
 data/db.json
 data/generated/
+
+# 大文件 / 媒体（勿入库，否则永久膨胀 git 历史）
+*.mp4
+*.mov
+*.zip
+
+# 运行时临时文件与调试日志
+data/*.jsonl
+data/*.tmp.*
+data/pm2-*.log
+
+# 工具产物
+*.tsbuildinfo
+.vitest/
+coverage/
+
+# 多智能体工作流临时输出
+.workflow-out/
+
+# 媒体抢救备份（本地硬盘保全，勿入库；建议另存云盘/U盘）
+media-backup/
+
+# Claude Code 本地配置（机器相关，勿入库）
+.claude/settings.local.json
