@@ -21,7 +21,9 @@ interface Repos {
   assets: {
     listByProduct(productId: string, kind?: string): Promise<any[]>;
     listAll(kind?: string): Promise<any[]>;
+    getById(id: string): Promise<any>;
     create(data: any): Promise<any>;
+    softDelete(id: string): Promise<any>;
     setPrimary(assetId: string, productId: string): Promise<any>;
   };
   workflows: {

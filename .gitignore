@@ -10,6 +10,7 @@ build/
 *.log
 data/db.json
 data/generated/
+data/uploads/
 # SQLite 数据库文件（源头是 schema + migrations + 导入脚本，库本身不入库）
 data/*.db
 data/*.db-journal

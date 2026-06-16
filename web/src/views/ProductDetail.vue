@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from "element-plus";
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, type NewProduct, type ProductDetail } from "../api";
 import WorkflowPanel from "../components/WorkflowPanel.vue";
@@ -38,6 +38,31 @@ onMounted(load);
 function mediaSrc(url?: string) {
   if (!url) return "";
   return url.startsWith("http") ? url : `/${url}`;
+}
+
+// 原图(上传输入)与生成素材(产出)分开展示
+const originals = computed(() => product.value?.assets.filter((a) => a.kind === "original") || []);
+const outputs = computed(() => product.value?.assets.filter((a) => a.kind !== "original") || []);
+
+async function customUpload(opt: any) {
+  if (!product.value) return;
+  try {
+    await api.uploadProductImage(product.value.id, opt.file as File);
+    ElMessage.success("原图已上传");
+    await load();
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+  }
+}
+
+async function removeAsset(id: string) {
+  try {
+    await api.deleteAsset(id);
+    ElMessage.success("已删除");
+    await load();
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+  }
 }
 
 function openEdit() {
@@ -128,10 +153,36 @@ async function remove() {
       </el-descriptions-item>
     </el-descriptions>
 
-    <h3>素材（{{ product.assets.length }}）</h3>
-    <el-empty v-if="!product.assets.length" description="暂无素材" />
+    <h3>商品原图（{{ originals.length }}）</h3>
+    <div class="assets">
+      <div v-for="a in originals" :key="a.id" class="asset original">
+        <el-image
+          :src="mediaSrc(a.mediaUrl)"
+          fit="cover"
+          style="width: 160px; height: 160px; border-radius: 8px"
+          :preview-src-list="[mediaSrc(a.mediaUrl)]"
+        />
+        <el-button class="del-btn" size="small" text type="danger" @click="removeAsset(a.id)">删除</el-button>
+      </div>
+      <el-upload
+        class="uploader"
+        :http-request="customUpload"
+        :show-file-list="false"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        drag
+      >
+        <div class="up-inner">
+          <el-icon :size="22"><Upload /></el-icon>
+          <div>上传原图</div>
+        </div>
+      </el-upload>
+    </div>
+    <p class="hint">上传商品原始图后，图片/视频生成节点才能用它作 AI 生成参考。</p>
+
+    <h3>生成素材（{{ outputs.length }}）</h3>
+    <el-empty v-if="!outputs.length" description="暂无生成素材，去下方工作流生成" :image-size="60" />
     <div v-else class="assets">
-      <div v-for="a in product.assets" :key="a.id" class="asset">
+      <div v-for="a in outputs" :key="a.id" class="asset">
         <el-image
           v-if="a.kind === 'image'"
           :src="mediaSrc(a.mediaUrl)"
@@ -177,5 +228,29 @@ async function remove() {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+.asset.original {
+  width: 160px;
+}
+.del-btn {
+  margin-top: 2px;
+}
+.uploader :deep(.el-upload-dragger) {
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.up-inner {
+  color: #94a3b8;
+  text-align: center;
+  font-size: 13px;
+}
+.hint {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 4px 0 0;
 }
 </style>

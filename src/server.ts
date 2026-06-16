@@ -1,6 +1,8 @@
 // 阶段二 · Fastify 新后端骨架。读端点接仓储层（SQLite），与旧 server.js 并存（绞杀者）。
 // 运行：npm run dev:api（tsx watch）/ npm run start:api。默认端口 4174，旧后端仍在 4173。
+import fs from "node:fs";
 import path from "node:path";
+import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -12,8 +14,11 @@ import { assetRoutes } from "./routes/assets.js";
 import { healthRoutes } from "./routes/health.js";
 import { productRoutes } from "./routes/products.js";
 import { statsRoutes } from "./routes/stats.js";
+import { uploadRoutes } from "./routes/uploads.js";
 import { workbenchRoutes } from "./routes/workbench.js";
 import { workflowRoutes } from "./routes/workflows.js";
+
+const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } });
 
@@ -38,10 +43,20 @@ async function main() {
   });
   await app.register(swaggerUi, { routePrefix: "/docs" });
 
+  // 文件上传(商品原图)
+  await app.register(multipart, { limits: { fileSize: 12 * 1024 * 1024 } });
+
   // 媒体：抢救备份只读静态暴露，让前端能显示图/视频
   await app.register(fastifyStatic, {
     root: path.join(process.cwd(), "media-backup"),
     prefix: "/media-backup/",
+    decorateReply: false,
+  });
+  // 上传的商品原图静态暴露
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  await app.register(fastifyStatic, {
+    root: UPLOADS_DIR,
+    prefix: "/uploads/",
     decorateReply: false,
   });
 
@@ -63,6 +78,7 @@ async function main() {
   await assetRoutes(app);
   await accountRoutes(app);
   await workflowRoutes(app);
+  await uploadRoutes(app);
 
   const port = Number(process.env.API_PORT || 4174);
   await app.listen({ port, host: "0.0.0.0" });

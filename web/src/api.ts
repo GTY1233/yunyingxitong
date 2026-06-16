@@ -26,7 +26,7 @@ export interface Product {
 
 export interface Asset {
   id: string;
-  kind: "image" | "video" | "copy";
+  kind: "image" | "video" | "copy" | "original";
   name?: string;
   content?: string;
   mediaUrl?: string;
@@ -128,5 +128,15 @@ export const api = {
     request<Product>(`/api/v2/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteProduct: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/api/v2/products/${id}`, { method: "DELETE" }),
+  uploadProductImage: async (productId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/v2/products/${productId}/images`, { method: "POST", body: fd });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body?.error?.message || `上传失败（${res.status}）`);
+    return body.data as Asset;
+  },
+  deleteAsset: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/v2/assets/${id}`, { method: "DELETE" }),
   listAccounts: () => request<Account[]>("/api/v2/accounts"),
 };
