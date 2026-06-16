@@ -293,9 +293,12 @@ src/repositories/asset.repo.ts …
 - `prisma migrate dev` 建库:`data/app.db` + 版本化迁移 `prisma/migrations/20260616_init`。
 - `scripts/import-from-json.js`(幂等):导入 **6 商品 + 8 账号 + 13 资产(image 8 / video 2 / copy 3)+ 2 平台商品ID映射**;媒体重指向 `media-backup/` 本地文件(实测文件存在);价格转分、时间戳为真实 UTC、商品无派生状态字段。
 - 验证:P1027 价格 5000 分、真实 `createdAt`、无 `imageStatus` 字段、媒体路径有效。
+- **仓储层已建** `lib/repositories/`(products/accounts/assets/workflows/status + client 单例):Prisma 封装、领域函数式、**数据访问唯一边界**(应用不直接 import @prisma/client)。`status.js` 实现「派生状态」(从资产/节点派生 imageStatus/进度,替代旧的落库状态字段)。`scripts/verify-repositories.js` 对真实 app.db 验证通过。
 
-**下一步(本阶段剩余,尚未做)**:
-1. 仓储层 `src/repositories/*`(或先在 `lib/db-service.js` 内封装)——让 27 个 service 改读 SQLite,**对外签名不变**。
-2. 服务静态资源新增 `media-backup/` 路由(或把媒体并入 `data/generated/`),让页面能显示本地图/视频。
-3. 派生状态视图 `product_status_v`(或查询层聚合)替代商品卡片旧状态字段。
-4. 关键链路回归(靠阶段0 测试 + 手点),通过后旧 `db.json` 退役为只读备份。
+**排序决策(重要)**:**不**把旧的 2000 行 `server.js` + 27 个 service 回填改读 SQLite——该后端阶段二将被 Fastify 整体替换,为其写「干净 schema → 旧反范式形状」的翻译层是抛弃性工作。改为:**旧 app 暂留在 `db.json`(作只读参考),仓储层直接供阶段二新后端使用**。
+
+**本阶段剩余 / 顺延到阶段二**:
+1. ~~仓储层~~ ✅ 已完成(`lib/repositories/`)。
+2. 阶段二新后端(Fastify)接仓储层提供读/写端点;`media-backup/` 静态路由随新后端一并加,让页面显示本地图/视频。
+3. 派生状态:已在 `status.js` 落地函数式派生;如需 SQL 视图 `product_status_v` 可后续加。
+4. 仓储层补全写操作(事务)与剩余实体(generation/listing/publish/log)的 repo;阶段二端点齐后旧 `db.json` 退役为只读备份。
