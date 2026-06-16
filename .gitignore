@@ -9,6 +9,11 @@ build/
 *.log
 data/db.json
 data/generated/
+# SQLite 数据库文件（源头是 schema + migrations + 导入脚本，库本身不入库）
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 
 # 大文件 / 媒体（勿入库，否则永久膨胀 git 历史）
 *.mp4

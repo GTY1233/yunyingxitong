@@ -1,0 +1,244 @@
+// 阶段一数据层 schema（Prisma + SQLite）。详见 docs/12-stage1-data-layer-design.md。
+// 设计纪律：状态单一真相源（商品不存派生状态）、真实时间戳、无反范式冗余、内嵌数组拆表。
+// 注意：SQLite 无原生 JSON 类型，platforms/colors/params/meta/missing/platformResponse 等以 JSON 字符串存于 String 列。
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  displayCode   String?  @map("display_code") // 旧业务编号 P1027，便于对照
+  skuCode       String?  @map("sku_code")
+  name          String
+  category      String?
+  priceCents    Int?     @map("price_cents") // 统一存“分”，杜绝浮点
+  stock         Int      @default(0)
+  warningStock  Int      @default(0) @map("warning_stock")
+  sellingPoints String?  @map("selling_points")
+  specs         String?
+  platforms     String?  // JSON 字符串
+  colors        String?  // JSON 字符串
+  status        String?
+
+  assets          Asset[]
+  workflows       PlatformWorkflow[]
+  generationTasks GenerationTask[]
+  listingTasks    ListingTask[]
+  publishTasks    PublishTask[]
+  productMappings PlatformProductMapping[]
+  logs            OperationLog[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("products")
+}
+
+model Account {
+  id       String  @id @default(cuid())
+  platform String?
+  name     String?
+  type     String? // 店铺账号 / 内容账号
+  role     String? // main_shop | authorized | creator
+  auth     String?
+  rule     String?
+  persona  String?
+  isDemo   Boolean @default(false) @map("is_demo")
+
+  listingTasks ListingTask[]
+  publishTasks PublishTask[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("accounts")
+}
+
+model Asset {
+  id                String   @id @default(cuid())
+  productId         String   @map("product_id")
+  generationTaskId  String?  @map("generation_task_id") // 仅作引用，不建强关系，避免循环
+  kind              String   // image | copy | video
+  type              String?
+  name              String?
+  status            String?
+  usage             String?
+  version           String?
+  provider          String?
+  isPrimary         Boolean  @default(false) @map("is_primary")
+  content           String?
+  mediaUrl          String?  @map("media_url") // 导入时重指向 media-backup 本地文件
+  posterUrl         String?  @map("poster_url")
+  aspectRatio       String?  @map("aspect_ratio")
+  duration          String?
+
+  product Product @relation(fields: [productId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@map("assets")
+}
+
+model PlatformWorkflow {
+  id            String  @id @default(cuid())
+  productId     String  @map("product_id")
+  platform      String
+  template      String?
+  status        String?
+  currentNodeId String? @map("current_node_id")
+
+  product Product        @relation(fields: [productId], references: [id])
+  nodes   WorkflowNode[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@map("platform_workflows")
+}
+
+model WorkflowNode {
+  id         String  @id @default(cuid())
+  workflowId String  @map("workflow_id")
+  nodeKey    String  @map("node_key")
+  seq        Int
+  label      String?
+  type       String?
+  kind       String?
+  status     String  @default("未开始") // 流程状态的唯一真相源（受控 7 态）
+  error      String?
+  meta       String? // JSON：旧 taskId/taskIds/hint/params 归并
+
+  workflow PlatformWorkflow @relation(fields: [workflowId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([workflowId])
+  @@map("workflow_nodes")
+}
+
+model GenerationTask {
+  id                 String   @id @default(cuid())
+  productId          String   @map("product_id")
+  platformWorkflowId String?  @map("platform_workflow_id")
+  assetId            String?  @map("asset_id")
+  kind               String?
+  type               String?
+  label              String?
+  params             String?  // JSON
+  status             String?
+  provider           String?
+  error              String?
+  attempts           Int      @default(0)
+  maxAttempts        Int      @default(2) @map("max_attempts")
+  startedAt          DateTime? @map("started_at")
+  finishedAt         DateTime? @map("finished_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@map("generation_tasks")
+}
+
+model ListingTask {
+  id                  String   @id @default(cuid())
+  productId           String   @map("product_id")
+  accountId           String?  @map("account_id")
+  platform            String?
+  status              String?
+  completeness        Int      @default(0)
+  missing             String?  // JSON
+  mode                String?
+  platformMode        String?  @map("platform_mode")
+  platformCapability  String?  @map("platform_capability")
+  externalId          String?  @map("external_id")
+  platformResponse    String?  @map("platform_response") // JSON
+  failureReason       String?  @map("failure_reason")
+  attempts            Int      @default(0)
+  maxAttempts         Int      @default(2) @map("max_attempts")
+
+  product Product  @relation(fields: [productId], references: [id])
+  account Account? @relation(fields: [accountId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@map("listing_tasks")
+}
+
+model PublishTask {
+  id            String   @id @default(cuid())
+  productId     String   @map("product_id")
+  accountId     String?  @map("account_id")
+  assetId       String?  @map("asset_id")
+  platform      String?
+  status        String?
+  scheduleSlot  String?  @map("schedule_slot")
+  scheduledAt   DateTime? @map("scheduled_at") // 真实时间，替代 "今天18:00"
+  publishedAt   DateTime? @map("published_at")
+  attachProduct Boolean  @default(true) @map("attach_product")
+  mode          String?
+  failureReason String?  @map("failure_reason")
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(2) @map("max_attempts")
+
+  product Product  @relation(fields: [productId], references: [id])
+  account Account? @relation(fields: [accountId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@map("publish_tasks")
+}
+
+model PlatformProductMapping {
+  id                String @id @default(cuid())
+  productId         String @map("product_id")
+  platform          String
+  externalProductId String @map("external_product_id")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([productId, platform])
+  @@map("platform_product_mappings")
+}
+
+model OperationLog {
+  id        String   @id @default(cuid())
+  productId String?  @map("product_id")
+  kind      String?
+  message   String?
+  level     String?
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@map("operation_logs")
+}
