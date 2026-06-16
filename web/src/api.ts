@@ -77,5 +77,7 @@ export const api = {
     request<Product>("/api/v2/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: Partial<NewProduct>) =>
     request<Product>(`/api/v2/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteProduct: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/v2/products/${id}`, { method: "DELETE" }),
   listAccounts: () => request<Account[]>("/api/v2/accounts"),
 };

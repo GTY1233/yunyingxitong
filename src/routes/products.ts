@@ -82,4 +82,21 @@ export async function productRoutes(app: FastifyInstance) {
       return { ok: true, data: updated };
     }
   );
+
+  app.delete<{ Params: { id: string } }>(
+    "/api/v2/products/:id",
+    {
+      schema: {
+        tags: ["products"],
+        summary: "删除商品（软删除）",
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+      },
+    },
+    async (req) => {
+      const existing = await repos.products.getById(req.params.id);
+      if (!existing) throw AppError.notFound("商品不存在");
+      await repos.products.softDelete(req.params.id);
+      return { ok: true, data: { id: req.params.id, deleted: true } };
+    }
+  );
 }

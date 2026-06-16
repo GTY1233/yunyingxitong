@@ -74,6 +74,12 @@ describe("仓储层 CRUD + 派生状态(对临时库)", () => {
     expect(got.createdAt).toBeInstanceOf(Date); // 真实时间戳
   });
 
+  it("不传编号时自动生成 P 编号", async () => {
+    const p = await repos.products.create({ name: "无编号商品", stock: 1 });
+    expect(p.displayCode).toMatch(/^P\d+$/);
+    await repos.products.softDelete(p.id); // 清理,避免影响后续计数断言
+  });
+
   it("派生状态:加一张已生成图片后 imageStatus=已生成", async () => {
     let st = await repos.status.deriveProductMediaStatus(productId);
     expect(st.imageStatus).toBe("未生成");
