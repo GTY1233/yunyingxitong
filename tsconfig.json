@@ -15,6 +15,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["server.js", "lib/**/*.js", "scripts/**/*.js", "tests/**/*.js"],
+  "include": ["server.js", "lib/**/*.js", "scripts/**/*.js", "tests/**/*.js", "src/**/*.ts"],
   "exclude": ["node_modules", "data", "dist", "build", "app.js"]
 }
