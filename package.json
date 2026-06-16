@@ -12,6 +12,7 @@
     "dev:api": "tsx watch src/server.ts",
     "dev:web": "vite",
     "build:web": "vite build",
+    "typecheck:web": "vue-tsc -p web/tsconfig.json --noEmit",
     "preview:web": "vite preview",
     "check": "node scripts/check-js.js",
     "lint": "biome lint .",

@@ -23,3 +23,5 @@ jobs:
         run: npx tsc --noEmit
       - name: Test
         run: npm test
+      - name: Frontend typecheck & build
+        run: npm run typecheck:web && npm run build:web
