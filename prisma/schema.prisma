@@ -242,3 +242,14 @@ model OperationLog {
   @@index([productId])
   @@map("operation_logs")
 }
+
+// 模特图库（全局,不绑定商品;换装生图时选一张作 node41 模特图）
+model ModelImage {
+  id        String    @id @default(cuid())
+  name      String?
+  mediaUrl  String    @map("media_url") // uploads/model-xxx.png
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("model_images")
+}

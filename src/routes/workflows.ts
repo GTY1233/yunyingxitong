@@ -55,12 +55,15 @@ export async function workflowRoutes(app: FastifyInstance) {
     }
   );
 
-  app.post<{ Params: { id: string; nodeId: string; action: string } }>(
+  app.post<{
+    Params: { id: string; nodeId: string; action: string };
+    Body: { modelImageId?: string };
+  }>(
     "/api/v2/workflows/:id/nodes/:nodeId/:action",
     {
       schema: {
         tags: ["workflows"],
-        summary: "节点动作 execute|confirm|skip|retry",
+        summary: "节点动作 execute|confirm|skip|retry(execute 可带 modelImageId 选模特图)",
         params: {
           type: "object",
           required: ["id", "nodeId", "action"],
@@ -70,11 +73,18 @@ export async function workflowRoutes(app: FastifyInstance) {
             action: { type: "string", enum: ["execute", "confirm", "skip", "retry"] },
           },
         },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: { modelImageId: { type: "string" } },
+        },
       },
     },
     async (req) => {
       try {
-        const wf = await engine.act(req.params.id, req.params.nodeId, req.params.action);
+        const wf = await engine.act(req.params.id, req.params.nodeId, req.params.action, {
+          modelImageId: req.body?.modelImageId,
+        });
         return { ok: true, data: wf };
       } catch (e) {
         throw new AppError((e as Error).message, 400, "WORKFLOW_ACTION_FAILED");

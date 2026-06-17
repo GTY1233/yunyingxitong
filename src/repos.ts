@@ -26,6 +26,12 @@ interface Repos {
     softDelete(id: string): Promise<any>;
     setPrimary(assetId: string, productId: string): Promise<any>;
   };
+  modelImages: {
+    list(): Promise<any[]>;
+    getById(id: string): Promise<any>;
+    create(data: any): Promise<any>;
+    softDelete(id: string): Promise<any>;
+  };
   workflows: {
     getByProduct(productId: string): Promise<any[]>;
     getById(id: string): Promise<any>;

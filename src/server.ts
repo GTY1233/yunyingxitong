@@ -13,6 +13,7 @@ import { registerAuth } from "./plugins/auth.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { assetRoutes } from "./routes/assets.js";
 import { healthRoutes } from "./routes/health.js";
+import { modelImageRoutes } from "./routes/model-images.js";
 import { productRoutes } from "./routes/products.js";
 import { statsRoutes } from "./routes/stats.js";
 import { uploadRoutes } from "./routes/uploads.js";
@@ -88,6 +89,7 @@ async function main() {
   await accountRoutes(app);
   await workflowRoutes(app);
   await uploadRoutes(app);
+  await modelImageRoutes(app);
 
   // 重启后清理残留「执行中」节点(后台任务已随进程丢失)
   try {

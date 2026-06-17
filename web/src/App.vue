@@ -30,6 +30,10 @@ const activeMenu = computed(() =>
           <el-icon><PictureFilled /></el-icon>
           <span>素材库</span>
         </el-menu-item>
+        <el-menu-item index="/models">
+          <el-icon><Avatar /></el-icon>
+          <span>模特图库</span>
+        </el-menu-item>
         <el-menu-item index="/accounts">
           <el-icon><User /></el-icon>
           <span>平台账号</span>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
 import { onMounted, onUnmounted, ref } from "vue";
-import { api, type Workflow } from "../api";
+import { api, type ModelImage, type Workflow } from "../api";
 
 const props = defineProps<{ productId: string }>();
 
@@ -52,13 +52,50 @@ async function create() {
   }
 }
 
-async function act(workflowId: string, nodeId: string, action: string) {
+// 模特图选择(换装生图前)
+const modelDialog = ref(false);
+const models = ref<ModelImage[]>([]);
+const selectedModel = ref("");
+const pending = ref<{ wfId: string; nodeId: string } | null>(null);
+
+function modelSrc(u?: string) {
+  return !u ? "" : u.startsWith("http") ? u : `/${u}`;
+}
+
+// 图片(换装)节点执行前先选模特图;其余动作直接执行。
+async function runAction(wfId: string, nodeId: string, action: string, kind?: string) {
+  if (action === "execute" && kind === "image") {
+    pending.value = { wfId, nodeId };
+    selectedModel.value = "";
+    try {
+      models.value = await api.listModelImages();
+    } catch {
+      models.value = [];
+    }
+    modelDialog.value = true;
+    return;
+  }
+  await doAct(wfId, nodeId, action);
+}
+
+async function doAct(wfId: string, nodeId: string, action: string, modelImageId?: string) {
   try {
-    await api.workflowAction(workflowId, nodeId, action);
+    await api.workflowAction(wfId, nodeId, action, modelImageId);
     await load();
   } catch (e) {
     ElMessage.error((e as Error).message);
   }
+}
+
+async function confirmModel() {
+  if (!selectedModel.value) {
+    ElMessage.warning("请选择一张模特图");
+    return;
+  }
+  const p = pending.value;
+  if (!p) return;
+  modelDialog.value = false;
+  await doAct(p.wfId, p.nodeId, "execute", selectedModel.value);
 }
 
 const COLOR: Record<string, string> = {
@@ -137,19 +174,42 @@ function wfTagType(status?: string) {
                 v-if="primaryAction(node.status)"
                 size="small"
                 :type="primaryAction(node.status)!.type"
-                @click="act(wf.id, node.id, primaryAction(node.status)!.action)"
+                @click="runAction(wf.id, node.id, primaryAction(node.status)!.action, node.kind)"
               >{{ primaryAction(node.status)!.label }}</el-button>
               <el-button
                 v-if="canSkip(node.status)"
                 size="small"
                 text
-                @click="act(wf.id, node.id, 'skip')"
+                @click="doAct(wf.id, node.id, 'skip')"
               >跳过</el-button>
             </span>
           </li>
         </ul>
       </el-card>
     </div>
+
+    <el-dialog v-model="modelDialog" title="选择模特图(换装)" width="560px">
+      <el-empty
+        v-if="!models.length"
+        description="模特图库还没有图,请先到「模特图库」上传"
+        :image-size="70"
+      />
+      <div v-else class="model-grid">
+        <div
+          v-for="m in models"
+          :key="m.id"
+          class="model-cell"
+          :class="{ sel: selectedModel === m.id }"
+          @click="selectedModel = m.id"
+        >
+          <el-image :src="modelSrc(m.mediaUrl)" fit="cover" style="width: 120px; height: 120px" />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="modelDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedModel" @click="confirmModel">用它换装生成</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -217,5 +277,20 @@ function wfTagType(status?: string) {
   margin-left: auto;
   display: flex;
   gap: 6px;
+}
+.model-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.model-cell {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  line-height: 0;
+}
+.model-cell.sel {
+  border-color: #2563eb;
 }
 </style>
