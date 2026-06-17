@@ -253,3 +253,14 @@ model ModelImage {
 
   @@map("model_images")
 }
+
+// 参考视频库（全局;生视频时选一段作 node161 参考视频,决定动作/节奏）
+model ReferenceVideo {
+  id        String    @id @default(cuid())
+  name      String?
+  mediaUrl  String    @map("media_url") // uploads/refvideo-xxx.mp4
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("reference_videos")
+}

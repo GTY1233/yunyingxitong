@@ -57,34 +57,50 @@ export async function workflowRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { id: string; nodeId: string; action: string };
-    Body: { modelImageId?: string };
+    Body: Record<string, unknown>;
   }>(
     "/api/v2/workflows/:id/nodes/:nodeId/:action",
     {
       schema: {
         tags: ["workflows"],
-        summary: "节点动作 execute|confirm|skip|retry(execute 可带 modelImageId 选模特图)",
+        summary: "节点动作 execute|confirm|skip|retry(execute 可带生成参数)",
         params: {
           type: "object",
           required: ["id", "nodeId", "action"],
           properties: {
             id: { type: "string" },
             nodeId: { type: "string" },
-            action: { type: "string", enum: ["execute", "confirm", "skip", "retry"] },
+            action: { type: "string", enum: ["execute", "confirm", "skip", "retry", "rearm"] },
           },
         },
+        // 生成参数(execute 用):图=模特/提示词;文案=提示词/条数;视频=参考视频/微调参数
         body: {
           type: "object",
           additionalProperties: false,
-          properties: { modelImageId: { type: "string" } },
+          properties: {
+            modelImageId: { type: "string" },
+            prompt: { type: "string" },
+            versionCount: { type: "integer", minimum: 1, maximum: 5 },
+            referenceVideoId: { type: "string" },
+            frameRate: { type: "integer" },
+            seconds: { type: "integer" },
+            videoWidth: { type: "integer" },
+            videoHeight: { type: "integer" },
+            mode: { type: "integer" },
+            expressionIntensity: { type: "number" },
+            ruKilnAmplitude: { type: "number" },
+          },
         },
       },
     },
     async (req) => {
       try {
-        const wf = await engine.act(req.params.id, req.params.nodeId, req.params.action, {
-          modelImageId: req.body?.modelImageId,
-        });
+        const wf = await engine.act(
+          req.params.id,
+          req.params.nodeId,
+          req.params.action,
+          req.body || {}
+        );
         return { ok: true, data: wf };
       } catch (e) {
         throw new AppError((e as Error).message, 400, "WORKFLOW_ACTION_FAILED");

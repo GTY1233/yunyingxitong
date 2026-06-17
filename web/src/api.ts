@@ -110,6 +110,8 @@ export interface ModelImage {
   mediaUrl: string;
 }
 
+export type ReferenceVideo = ModelImage;
+
 export const api = {
   getStats: () => request<DashboardStats>("/api/v2/stats"),
   getWorkbench: () => request<Workbench>("/api/v2/workbench"),
@@ -120,10 +122,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ productId, platform }),
     }),
-  workflowAction: (workflowId: string, nodeId: string, action: string, modelImageId?: string) =>
+  workflowAction: (
+    workflowId: string,
+    nodeId: string,
+    action: string,
+    params: Record<string, unknown> = {}
+  ) =>
     request<Workflow>(`/api/v2/workflows/${workflowId}/nodes/${nodeId}/${action}`, {
       method: "POST",
-      body: JSON.stringify(modelImageId ? { modelImageId } : {}),
+      body: JSON.stringify(params),
     }),
   listModelImages: () => request<ModelImage[]>("/api/v2/model-images"),
   uploadModelImage: async (file: File) => {
@@ -136,6 +143,17 @@ export const api = {
   },
   deleteModelImage: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/api/v2/model-images/${id}`, { method: "DELETE" }),
+  listReferenceVideos: () => request<ReferenceVideo[]>("/api/v2/reference-videos"),
+  uploadReferenceVideo: async (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/v2/reference-videos", { method: "POST", body: fd });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body?.error?.message || `上传失败（${res.status}）`);
+    return body.data as ReferenceVideo;
+  },
+  deleteReferenceVideo: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/v2/reference-videos/${id}`, { method: "DELETE" }),
   listAssets: (kind?: string) =>
     request<AssetWithProduct[]>(`/api/v2/assets${kind ? `?kind=${kind}` : ""}`),
   listProducts: () => request<Product[]>("/api/v2/products"),

@@ -32,6 +32,12 @@ interface Repos {
     create(data: any): Promise<any>;
     softDelete(id: string): Promise<any>;
   };
+  referenceVideos: {
+    list(): Promise<any[]>;
+    getById(id: string): Promise<any>;
+    create(data: any): Promise<any>;
+    softDelete(id: string): Promise<any>;
+  };
   workflows: {
     getByProduct(productId: string): Promise<any[]>;
     getById(id: string): Promise<any>;

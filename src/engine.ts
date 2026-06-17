@@ -11,7 +11,7 @@ interface Engine {
     workflowId: string,
     nodeId: string,
     action: string,
-    opts?: { sync?: boolean; modelImageId?: string }
+    opts?: { sync?: boolean } & Record<string, unknown>
   ): Promise<any>;
   recoverStuckNodes(): Promise<number>;
 }

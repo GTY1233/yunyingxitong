@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
-import { onMounted, onUnmounted, ref } from "vue";
-import { api, type ModelImage, type Workflow } from "../api";
+import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { type ModelImage, type ReferenceVideo, type Workflow, api } from "../api";
 
 const props = defineProps<{ productId: string }>();
 // 工作流数据变化(尤其节点生成完成)时通知父级刷新「生成素材/派生状态」
 const emit = defineEmits<{ (e: "changed"): void }>();
+
+const DEFAULT_TRYON_PROMPT =
+  "先脱光图一女生的全部衣服和帽子、鞋袜手套，再让图1的女人穿上图2款式的衣服，保持图一角色脸部、发型、姿态角度不变";
 
 const workflows = ref<Workflow[]>([]);
 const loading = ref(true);
@@ -20,12 +23,10 @@ function anyRunning() {
   return workflows.value.some((w) => w.nodes.some((n) => n.status === "执行中"));
 }
 
-// silent=true 时不显示骨架(轮询刷新用)。生成在后台异步进行,故有节点执行中时自动轮询。
 async function load(silent = false) {
   if (!silent) loading.value = true;
   try {
     workflows.value = await api.listWorkflows(props.productId);
-    // 节点状态有变化 → 通知父级刷新生成素材(尤其生成完成时)
     const sig = workflows.value.map((w) => w.nodes.map((n) => n.status).join()).join("|");
     if (sig !== lastSig) {
       lastSig = sig;
@@ -61,50 +62,82 @@ async function create() {
   }
 }
 
-// 模特图选择(换装生图前)
-const modelDialog = ref(false);
-const models = ref<ModelImage[]>([]);
-const selectedModel = ref("");
-const pending = ref<{ wfId: string; nodeId: string } | null>(null);
-
-function modelSrc(u?: string) {
+function mediaSrc(u?: string) {
   return !u ? "" : u.startsWith("http") ? u : `/${u}`;
 }
 
-// 图片(换装)节点执行前先选模特图;其余动作直接执行。
-async function runAction(wfId: string, nodeId: string, action: string, kind?: string) {
-  if (action === "execute" && kind === "image") {
-    pending.value = { wfId, nodeId };
-    selectedModel.value = "";
-    try {
-      models.value = await api.listModelImages();
-    } catch {
-      models.value = [];
+// —— 生成参数对话框(按节点类型) ——
+const dlg = ref(false);
+const dlgKind = ref<"image" | "copy" | "video" | "">("");
+const pending = ref<{ wfId: string; nodeId: string; regen: boolean } | null>(null);
+// 图片
+const models = ref<ModelImage[]>([]);
+const selectedModel = ref("");
+const imgPrompt = ref(DEFAULT_TRYON_PROMPT);
+// 文案
+const copyPrompt = ref("");
+const versionCount = ref(3);
+// 视频
+const refVideos = ref<ReferenceVideo[]>([]);
+const selectedRefVideo = ref("");
+const vp = reactive({
+  frameRate: 25,
+  seconds: 5,
+  videoWidth: 544,
+  videoHeight: 960,
+  mode: 1,
+  expressionIntensity: 1.0,
+  ruKilnAmplitude: 0.2,
+});
+
+const GEN_KINDS = ["image", "copy", "video"];
+
+async function runAction(wfId: string, nodeId: string, action: string, kind?: string, regen = false) {
+  if (action === "execute" && kind && GEN_KINDS.includes(kind)) {
+    pending.value = { wfId, nodeId, regen };
+    dlgKind.value = kind as "image" | "copy" | "video";
+    if (kind === "image") {
+      selectedModel.value = "";
+      imgPrompt.value = DEFAULT_TRYON_PROMPT;
+      models.value = await api.listModelImages().catch(() => []);
+    } else if (kind === "copy") {
+      copyPrompt.value = "";
+      versionCount.value = 3;
+    } else if (kind === "video") {
+      selectedRefVideo.value = "";
+      refVideos.value = await api.listReferenceVideos().catch(() => []);
     }
-    modelDialog.value = true;
+    dlg.value = true;
     return;
   }
   await doAct(wfId, nodeId, action);
 }
 
-async function doAct(wfId: string, nodeId: string, action: string, modelImageId?: string) {
+async function doAct(wfId: string, nodeId: string, action: string, params: Record<string, unknown> = {}) {
   try {
-    await api.workflowAction(wfId, nodeId, action, modelImageId);
+    await api.workflowAction(wfId, nodeId, action, params);
     await load();
   } catch (e) {
     ElMessage.error((e as Error).message);
   }
 }
 
-async function confirmModel() {
-  if (!selectedModel.value) {
-    ElMessage.warning("请选择一张模特图");
-    return;
-  }
+async function confirmGenerate() {
   const p = pending.value;
   if (!p) return;
-  modelDialog.value = false;
-  await doAct(p.wfId, p.nodeId, "execute", selectedModel.value);
+  let params: Record<string, unknown> = {};
+  if (dlgKind.value === "image") {
+    if (!selectedModel.value) return ElMessage.warning("请选择一张模特图");
+    params = { modelImageId: selectedModel.value, prompt: imgPrompt.value };
+  } else if (dlgKind.value === "copy") {
+    params = { prompt: copyPrompt.value || undefined, versionCount: versionCount.value };
+  } else if (dlgKind.value === "video") {
+    if (!selectedRefVideo.value) return ElMessage.warning("请选择一段参考视频");
+    params = { referenceVideoId: selectedRefVideo.value, ...vp };
+  }
+  dlg.value = false;
+  if (p.regen) await api.workflowAction(p.wfId, p.nodeId, "rearm").catch(() => {}); // 已成功→可执行
+  await doAct(p.wfId, p.nodeId, "execute", params);
 }
 
 const COLOR: Record<string, string> = {
@@ -130,12 +163,18 @@ function primaryAction(status: string): Act | null {
 function canSkip(status: string) {
   return !["已成功", "已跳过", "未开始", "执行中"].includes(status);
 }
+function canRegen(node: { status: string; kind?: string }) {
+  return node.status === "已成功" && !!node.kind && GEN_KINDS.includes(node.kind);
+}
 function wfTagType(status?: string) {
   if (status === "已完成") return "success";
   if (status === "失败") return "danger";
   if (status === "等待确认") return "warning";
   return "info";
 }
+
+const dlgTitle = () =>
+  dlgKind.value === "image" ? "换装生图参数" : dlgKind.value === "copy" ? "文案生成参数" : "视频生成参数";
 </script>
 
 <template>
@@ -186,6 +225,11 @@ function wfTagType(status?: string) {
                 @click="runAction(wf.id, node.id, primaryAction(node.status)!.action, node.kind)"
               >{{ primaryAction(node.status)!.label }}</el-button>
               <el-button
+                v-if="canRegen(node)"
+                size="small"
+                @click="runAction(wf.id, node.id, 'execute', node.kind, true)"
+              >重新生成</el-button>
+              <el-button
                 v-if="canSkip(node.status)"
                 size="small"
                 text
@@ -197,26 +241,66 @@ function wfTagType(status?: string) {
       </el-card>
     </div>
 
-    <el-dialog v-model="modelDialog" title="选择模特图(换装)" width="560px">
-      <el-empty
-        v-if="!models.length"
-        description="模特图库还没有图,请先到「模特图库」上传"
-        :image-size="70"
-      />
-      <div v-else class="model-grid">
-        <div
-          v-for="m in models"
-          :key="m.id"
-          class="model-cell"
-          :class="{ sel: selectedModel === m.id }"
-          @click="selectedModel = m.id"
-        >
-          <el-image :src="modelSrc(m.mediaUrl)" fit="cover" style="width: 120px; height: 120px" />
+    <el-dialog v-model="dlg" :title="dlgTitle()" width="600px">
+      <!-- 图片:模特图 + 提示词 -->
+      <template v-if="dlgKind === 'image'">
+        <div class="field-label">模特图(node41,选一张人物)</div>
+        <el-empty v-if="!models.length" description="模特图库为空,请先到「模特图库」上传" :image-size="60" />
+        <div v-else class="media-grid">
+          <div
+            v-for="m in models"
+            :key="m.id"
+            class="media-cell"
+            :class="{ sel: selectedModel === m.id }"
+            @click="selectedModel = m.id"
+          >
+            <el-image :src="mediaSrc(m.mediaUrl)" fit="cover" style="width: 110px; height: 110px" />
+          </div>
         </div>
-      </div>
+        <div class="field-label">换装提示词(node68,默认已填,可改)</div>
+        <el-input v-model="imgPrompt" type="textarea" :rows="3" />
+        <p class="tip">服装图自动用该商品的「商品原图」(node79)。</p>
+      </template>
+
+      <!-- 文案:提示词 + 条数 -->
+      <template v-else-if="dlgKind === 'copy'">
+        <div class="field-label">补充提示词(可选,留空用默认风格)</div>
+        <el-input v-model="copyPrompt" type="textarea" :rows="3" placeholder="例:突出性价比、场景化、第一人称…" />
+        <div class="field-label">生成条数</div>
+        <el-input-number v-model="versionCount" :min="1" :max="5" />
+      </template>
+
+      <!-- 视频:参考视频 + 微调参数 -->
+      <template v-else-if="dlgKind === 'video'">
+        <div class="field-label">参考视频(node161,选一段,决定动作/节奏)</div>
+        <el-empty v-if="!refVideos.length" description="参考视频库为空,请先到「参考视频库」上传" :image-size="60" />
+        <div v-else class="media-grid">
+          <div
+            v-for="r in refVideos"
+            :key="r.id"
+            class="media-cell"
+            :class="{ sel: selectedRefVideo === r.id }"
+            @click="selectedRefVideo = r.id"
+          >
+            <video :src="mediaSrc(r.mediaUrl)" muted style="width: 130px; height: 110px; object-fit: cover" />
+            <div class="rv-name">{{ r.name }}</div>
+          </div>
+        </div>
+        <p class="tip">参考图自动用「最新生成的换装图」(node103)。以下参数一般用默认,可微调:</p>
+        <div class="vp-grid">
+          <label>帧率 <el-input-number v-model="vp.frameRate" :min="1" size="small" controls-position="right" /></label>
+          <label>秒数 <el-input-number v-model="vp.seconds" :min="1" size="small" controls-position="right" /></label>
+          <label>宽 <el-input-number v-model="vp.videoWidth" :min="64" :step="16" size="small" controls-position="right" /></label>
+          <label>高 <el-input-number v-model="vp.videoHeight" :min="64" :step="16" size="small" controls-position="right" /></label>
+          <label>模式(1快/2降穿模/3身材) <el-input-number v-model="vp.mode" :min="1" :max="3" size="small" controls-position="right" /></label>
+          <label>表情强度 <el-input-number v-model="vp.expressionIntensity" :min="0" :max="3" :step="0.1" size="small" controls-position="right" /></label>
+          <label>汝窑幅度 <el-input-number v-model="vp.ruKilnAmplitude" :min="0" :max="3" :step="0.1" size="small" controls-position="right" /></label>
+        </div>
+      </template>
+
       <template #footer>
-        <el-button @click="modelDialog = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedModel" @click="confirmModel">用它换装生成</el-button>
+        <el-button @click="dlg = false">取消</el-button>
+        <el-button type="primary" @click="confirmGenerate">开始生成</el-button>
       </template>
     </el-dialog>
   </div>
@@ -287,19 +371,55 @@ function wfTagType(status?: string) {
   display: flex;
   gap: 6px;
 }
-.model-grid {
+.field-label {
+  font-size: 13px;
+  color: #475569;
+  margin: 12px 0 6px;
+}
+.field-label:first-child {
+  margin-top: 0;
+}
+.media-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
-.model-cell {
+.media-cell {
   border: 2px solid transparent;
   border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
   line-height: 0;
 }
-.model-cell.sel {
+.media-cell.sel {
   border-color: #2563eb;
+}
+.rv-name {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+  padding: 2px 4px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tip {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.vp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.vp-grid label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #475569;
+  gap: 8px;
 }
 </style>
