@@ -7,6 +7,7 @@ import fastifyStatic from "@fastify/static";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
+import engine from "./engine.js";
 import type { AppError } from "./lib/errors.js";
 import { registerAuth } from "./plugins/auth.js";
 import { accountRoutes } from "./routes/accounts.js";
@@ -87,6 +88,14 @@ async function main() {
   await accountRoutes(app);
   await workflowRoutes(app);
   await uploadRoutes(app);
+
+  // 重启后清理残留「执行中」节点(后台任务已随进程丢失)
+  try {
+    const recovered = await engine.recoverStuckNodes();
+    if (recovered) app.log.warn(`已重置 ${recovered} 个中断的「执行中」节点为失败,可重试`);
+  } catch (e) {
+    app.log.error(e);
+  }
 
   const port = Number(process.env.API_PORT || 4174);
   await app.listen({ port, host: "0.0.0.0" });

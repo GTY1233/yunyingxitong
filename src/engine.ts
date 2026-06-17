@@ -7,7 +7,8 @@ interface Engine {
   getWorkflow(id: string): Promise<any>;
   getForProduct(productId: string): Promise<any[]>;
   createForProduct(productId: string, platform: string): Promise<any>;
-  act(workflowId: string, nodeId: string, action: string): Promise<any>;
+  act(workflowId: string, nodeId: string, action: string, opts?: { sync?: boolean }): Promise<any>;
+  recoverStuckNodes(): Promise<number>;
 }
 
 const engine = engineJs as Engine;

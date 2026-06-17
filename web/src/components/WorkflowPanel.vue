@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { api, type Workflow } from "../api";
 
 const props = defineProps<{ productId: string }>();
@@ -11,17 +11,33 @@ const creating = ref(false);
 const platform = ref("抖音");
 const PLATFORMS = ["抖音", "小红书", "淘宝"];
 
-async function load() {
-  loading.value = true;
+let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+function anyRunning() {
+  return workflows.value.some((w) => w.nodes.some((n) => n.status === "执行中"));
+}
+
+// silent=true 时不显示骨架(轮询刷新用)。生成在后台异步进行,故有节点执行中时自动轮询。
+async function load(silent = false) {
+  if (!silent) loading.value = true;
   try {
     workflows.value = await api.listWorkflows(props.productId);
   } catch (e) {
-    ElMessage.error((e as Error).message);
+    if (!silent) ElMessage.error((e as Error).message);
   } finally {
     loading.value = false;
   }
+  if (anyRunning() && !pollTimer) {
+    pollTimer = setInterval(() => load(true), 4000);
+  } else if (!anyRunning() && pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
 }
-onMounted(load);
+onMounted(() => load());
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer);
+});
 
 async function create() {
   creating.value = true;
@@ -66,7 +82,7 @@ function primaryAction(status: string): Act | null {
   return null;
 }
 function canSkip(status: string) {
-  return !["已成功", "已跳过", "未开始"].includes(status);
+  return !["已成功", "已跳过", "未开始", "执行中"].includes(status);
 }
 function wfTagType(status?: string) {
   if (status === "已完成") return "success";
@@ -113,6 +129,9 @@ function wfTagType(status?: string) {
               :style="{ color: color(node.status), borderColor: color(node.status) }"
             >{{ node.status }}</el-tag>
             <span v-if="node.error" class="node-err">{{ node.error }}</span>
+            <span v-if="node.status === '执行中'" class="node-running">
+              <el-icon class="is-loading"><Loading /></el-icon>生成中…
+            </span>
             <span class="node-actions">
               <el-button
                 v-if="primaryAction(node.status)"
@@ -186,6 +205,13 @@ function wfTagType(status?: string) {
 .node-err {
   color: #c2413b;
   font-size: 12px;
+}
+.node-running {
+  color: #0f9f8f;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .node-actions {
   margin-left: auto;

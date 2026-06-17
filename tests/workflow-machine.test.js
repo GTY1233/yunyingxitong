@@ -87,6 +87,20 @@ describe("applyAction 状态流转", () => {
     expect(nodes[1].error).toBe("");
   });
 
+  it("start 可执行→执行中,complete 执行中→已成功并激活下一节点", () => {
+    const nodes = init("淘宝");
+    let after = applyAction(nodes, { type: "start", nodeId: "n1" });
+    expect(after[1].status).toBe("执行中");
+    after = applyAction(after, { type: "complete", nodeId: "n1" });
+    expect(after[1].status).toBe("已成功");
+    expect(after[2].status).toBe("可执行");
+  });
+
+  it("complete 非执行中节点抛错", () => {
+    const nodes = init("淘宝");
+    expect(() => applyAction(nodes, { type: "complete", nodeId: "n1" })).toThrow();
+  });
+
   it("淘宝链全程推进到已完成", () => {
     let nodes = init("淘宝"); // n0已成功, n1可执行
     nodes = applyAction(nodes, { type: "execute", nodeId: "n1" }); // 图

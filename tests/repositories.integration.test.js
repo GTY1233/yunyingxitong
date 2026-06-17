@@ -119,7 +119,7 @@ describe("工作流引擎(对临时库)", () => {
     while (wf.status !== "已完成" && guard++ < 12) {
       const node = wf.nodes.find((n) => !["已成功", "已跳过"].includes(n.status));
       const action = node.status === "可执行" ? "execute" : "confirm";
-      wf = await engine.act(wf.id, node.id, action);
+      wf = await engine.act(wf.id, node.id, action, { sync: true }); // sync:等待后台任务完成
     }
     expect(wf.status).toBe("已完成");
     expect(wf.progress).toBe(100);
@@ -143,7 +143,7 @@ describe("工作流引擎(对临时库)", () => {
         await expect(engine.act(cur.id, node.id, "execute")).rejects.toThrow();
         return;
       }
-      cur = await engine.act(cur.id, node.id, "execute");
+      cur = await engine.act(cur.id, node.id, "execute", { sync: true });
     }
     throw new Error("未遇到待确认节点");
   });
