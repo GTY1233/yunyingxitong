@@ -13,8 +13,9 @@ const repos = (await import("../lib/repositories/index.js")).default;
 const engine = (await import("../lib/workflow/service.js")).default;
 
 beforeAll(() => {
-  // 测试不调真实文案 API,强制模板兜底(本地 .env 可能带 COPY_API_KEY)
+  // 测试不调真实生成 API,强制模板兜底(本地 .env 可能带密钥)
   process.env.COPY_API_KEY = "";
+  process.env.RUNNINGHUB_API_KEY = "";
   for (const f of [TEST_DB, `${TEST_DB}-journal`]) {
     if (fs.existsSync(f)) fs.rmSync(f);
   }

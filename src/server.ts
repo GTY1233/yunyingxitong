@@ -19,6 +19,7 @@ import { workbenchRoutes } from "./routes/workbench.js";
 import { workflowRoutes } from "./routes/workflows.js";
 
 const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
+const GENERATED_DIR = path.join(process.cwd(), "data", "generated");
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" } });
 
@@ -57,6 +58,13 @@ async function main() {
   await app.register(fastifyStatic, {
     root: UPLOADS_DIR,
     prefix: "/uploads/",
+    decorateReply: false,
+  });
+  // 生成产物(模板兜底/下载的真实视频)静态暴露
+  if (!fs.existsSync(GENERATED_DIR)) fs.mkdirSync(GENERATED_DIR, { recursive: true });
+  await app.register(fastifyStatic, {
+    root: GENERATED_DIR,
+    prefix: "/generated/",
     decorateReply: false,
   });
 

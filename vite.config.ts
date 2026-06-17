@@ -11,6 +11,7 @@ export default defineConfig({
       "/api": { target: "http://localhost:4174", changeOrigin: true },
       "/media-backup": { target: "http://localhost:4174", changeOrigin: true },
       "/uploads": { target: "http://localhost:4174", changeOrigin: true },
+      "/generated": { target: "http://localhost:4174", changeOrigin: true },
     },
   },
   build: { outDir: "../dist-web", emptyOutDir: true },
