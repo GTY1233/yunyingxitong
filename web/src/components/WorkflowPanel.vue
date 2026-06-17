@@ -4,9 +4,12 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { api, type ModelImage, type Workflow } from "../api";
 
 const props = defineProps<{ productId: string }>();
+// 工作流数据变化(尤其节点生成完成)时通知父级刷新「生成素材/派生状态」
+const emit = defineEmits<{ (e: "changed"): void }>();
 
 const workflows = ref<Workflow[]>([]);
 const loading = ref(true);
+let lastSig = "";
 const creating = ref(false);
 const platform = ref("抖音");
 const PLATFORMS = ["抖音", "小红书", "淘宝"];
@@ -22,6 +25,12 @@ async function load(silent = false) {
   if (!silent) loading.value = true;
   try {
     workflows.value = await api.listWorkflows(props.productId);
+    // 节点状态有变化 → 通知父级刷新生成素材(尤其生成完成时)
+    const sig = workflows.value.map((w) => w.nodes.map((n) => n.status).join()).join("|");
+    if (sig !== lastSig) {
+      lastSig = sig;
+      emit("changed");
+    }
   } catch (e) {
     if (!silent) ElMessage.error((e as Error).message);
   } finally {

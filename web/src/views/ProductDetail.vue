@@ -22,18 +22,18 @@ const form = reactive({
   specs: "",
 });
 
-async function load() {
-  loading.value = true;
+async function load(silent = false) {
+  if (!silent) loading.value = true;
   try {
     product.value = await api.getProduct(route.params.id as string);
     error.value = "";
   } catch (e) {
-    error.value = (e as Error).message;
+    if (!silent) error.value = (e as Error).message;
   } finally {
     loading.value = false;
   }
 }
-onMounted(load);
+onMounted(() => load());
 
 function mediaSrc(url?: string) {
   if (!url) return "";
@@ -201,7 +201,7 @@ async function remove() {
       </div>
     </div>
 
-    <WorkflowPanel :product-id="product.id" />
+    <WorkflowPanel :product-id="product.id" @changed="load(true)" />
 
     <el-dialog v-model="dialog" title="编辑商品" width="520px">
       <el-form label-width="92px">
