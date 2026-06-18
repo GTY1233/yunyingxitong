@@ -16,6 +16,7 @@ beforeAll(() => {
   // 测试不调真实生成 API,强制模板兜底(本地 .env 可能带密钥)
   process.env.COPY_API_KEY = "";
   process.env.RUNNINGHUB_API_KEY = "";
+  process.env.PLATFORM_CRED_ENC_KEY = "0".repeat(64); // 凭证加密测试用
   for (const f of [TEST_DB, `${TEST_DB}-journal`]) {
     if (fs.existsSync(f)) fs.rmSync(f);
   }
@@ -146,5 +147,56 @@ describe("工作流引擎(对临时库)", () => {
       cur = await engine.act(cur.id, node.id, "execute", { sync: true });
     }
     throw new Error("未遇到待确认节点");
+  });
+});
+
+describe("平台凭证仓储(加密落库,对临时库)", () => {
+  it("appSecret 加密存、脱敏不漏、解密可还原", async () => {
+    const c = await repos.credentials.upsertConfig({
+      platform: "抖音",
+      api: "douyin_shop",
+      appKey: "ak_123",
+      appSecret: "sk_super_secret",
+    });
+    // 库里存的是密文,不是明文
+    expect(c.appSecretEnc).toBeTruthy();
+    expect(c.appSecretEnc).not.toContain("sk_super_secret");
+    expect(c.appSecretEnc.startsWith("v1:")).toBe(true);
+
+    // 脱敏视图:只暴露「已配置」,不含明文/密文
+    const masked = repos.credentials.maskView(c);
+    expect(masked.appSecretSet).toBe(true);
+    expect(JSON.stringify(masked)).not.toContain("sk_super_secret");
+    expect("appSecret" in masked).toBe(false);
+
+    // 解密只在内存:能还原明文
+    const dec = await repos.credentials.getDecrypted(c.id);
+    expect(dec.appKey).toBe("ak_123");
+    expect(dec.appSecret).toBe("sk_super_secret");
+  });
+
+  it("upsert 同 (platform,api) 更新而非重复创建;saveTokens 加密+设过期+状态", async () => {
+    const a = await repos.credentials.upsertConfig({
+      platform: "抖音",
+      api: "douyin_shop",
+      appKey: "ak_v2",
+    });
+    const list1 = (await repos.credentials.list()).filter((x) => x.api === "douyin_shop");
+    expect(list1.length).toBe(1); // 仍是 1 条
+    expect(a.appKey).toBe("ak_v2");
+
+    await repos.credentials.saveTokens(a.id, {
+      accessToken: "at_xxx",
+      refreshToken: "rt_xxx",
+      shopId: "shop_9",
+      expiresInSec: 7 * 86400,
+    });
+    const dec = await repos.credentials.getDecrypted(a.id);
+    expect(dec.accessToken).toBe("at_xxx");
+    expect(dec.shopId).toBe("shop_9");
+    const after = await repos.credentials.getById(a.id);
+    expect(after.status).toBe("已授权");
+    expect(after.accessTokenEnc.startsWith("v1:")).toBe(true);
+    expect(after.tokenExpiresAt).toBeInstanceOf(Date);
   });
 });

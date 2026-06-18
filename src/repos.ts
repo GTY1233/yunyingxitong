@@ -38,6 +38,17 @@ interface Repos {
     create(data: any): Promise<any>;
     softDelete(id: string): Promise<any>;
   };
+  credentials: {
+    list(): Promise<any[]>;
+    getById(id: string): Promise<any>;
+    getByApi(platform: string, api: string): Promise<any>;
+    upsertConfig(data: any): Promise<any>;
+    saveTokens(id: string, data: any): Promise<any>;
+    getDecrypted(id: string): Promise<any>;
+    setRunMode(id: string, runMode: string): Promise<any>;
+    setStatus(id: string, status: string, lastError?: string): Promise<any>;
+    maskView(c: any): any;
+  };
   workflows: {
     getByProduct(productId: string): Promise<any[]>;
     getById(id: string): Promise<any>;

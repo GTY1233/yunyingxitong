@@ -264,3 +264,33 @@ model ReferenceVideo {
 
   @@map("reference_videos")
 }
+
+// 平台凭证（app_key/secret/token;secret 与 token 字段为 AES-GCM 密文）
+// api:douyin_shop(上架)| douyin_open(发布)。runMode:demo|real|manual。
+model PlatformCredential {
+  id       String  @id @default(cuid())
+  platform String // 抖音
+  api      String // douyin_shop | douyin_open
+  label    String?
+  role     String? // main_shop | creator
+
+  appKey       String? @map("app_key")
+  appSecretEnc String? @map("app_secret_enc") // 密文
+
+  shopId           String?   @map("shop_id")
+  accessTokenEnc   String?   @map("access_token_enc") // 密文
+  refreshTokenEnc  String?   @map("refresh_token_enc") // 密文
+  tokenExpiresAt   DateTime? @map("token_expires_at")
+  refreshExpiresAt DateTime? @map("refresh_expires_at")
+
+  runMode   String  @default("demo") // demo | real | manual
+  status    String  @default("未授权") // 未授权|已授权|授权过期|刷新失败
+  lastError String? @map("last_error")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([platform, api])
+  @@map("platform_credentials")
+}
