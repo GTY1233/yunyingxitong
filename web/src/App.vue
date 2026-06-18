@@ -18,6 +18,10 @@ const activeMenu = computed(() =>
           <el-icon><HomeFilled /></el-icon>
           <span>今日工作台</span>
         </el-menu-item>
+        <el-menu-item index="/launch">
+          <el-icon><Promotion /></el-icon>
+          <span>工作流启动</span>
+        </el-menu-item>
         <el-menu-item index="/products">
           <el-icon><Goods /></el-icon>
           <span>商品 · 工作流</span>

@@ -104,6 +104,21 @@ export interface Workflow {
   nodes: WorkflowNode[];
 }
 
+export interface WorkflowTemplate {
+  platform: string;
+  template: string;
+  stepCount: number;
+  steps: string[];
+}
+
+export interface BatchLaunchResult {
+  platform: string;
+  ok: boolean;
+  workflowId?: string;
+  status?: string;
+  error?: string;
+}
+
 export interface ModelImage {
   id: string;
   name?: string;
@@ -157,12 +172,18 @@ export interface OAuthGuide {
 export const api = {
   getStats: () => request<DashboardStats>("/api/v2/stats"),
   getWorkbench: () => request<Workbench>("/api/v2/workbench"),
+  listWorkflowTemplates: () => request<WorkflowTemplate[]>("/api/v2/workflow-templates"),
   listWorkflows: (productId: string) =>
     request<Workflow[]>(`/api/v2/products/${productId}/workflows`),
   createWorkflow: (productId: string, platform: string) =>
     request<Workflow>("/api/v2/workflows", {
       method: "POST",
       body: JSON.stringify({ productId, platform }),
+    }),
+  batchLaunchWorkflows: (productId: string, platforms: string[]) =>
+    request<{ productId: string; results: BatchLaunchResult[] }>("/api/v2/workflows/batch", {
+      method: "POST",
+      body: JSON.stringify({ productId, platforms }),
     }),
   workflowAction: (
     workflowId: string,

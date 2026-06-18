@@ -45,6 +45,43 @@ export async function workflowRoutes(app: FastifyInstance) {
     }
   );
 
+  // 批量启动:一个商品 × 多平台,逐平台建链;已存在进行中链的平台不算硬失败,返回其原因。
+  app.post<{ Body: { productId: string; platforms: string[] } }>(
+    "/api/v2/workflows/batch",
+    {
+      schema: {
+        tags: ["workflows"],
+        summary: "批量为商品启动多平台工作流",
+        body: {
+          type: "object",
+          required: ["productId", "platforms"],
+          additionalProperties: false,
+          properties: {
+            productId: { type: "string" },
+            platforms: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string", enum: ["抖音", "小红书", "淘宝"] },
+            },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { productId, platforms } = req.body;
+      const results = [];
+      for (const platform of platforms) {
+        try {
+          const wf = await engine.createForProduct(productId, platform);
+          results.push({ platform, ok: true, workflowId: wf.id, status: wf.status });
+        } catch (e) {
+          results.push({ platform, ok: false, error: (e as Error).message });
+        }
+      }
+      return { ok: true, data: { productId, results } };
+    }
+  );
+
   app.get<{ Params: { id: string } }>(
     "/api/v2/workflows/:id",
     { schema: { tags: ["workflows"], params: idParam } },
