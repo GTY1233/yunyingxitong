@@ -42,6 +42,10 @@ const activeMenu = computed(() =>
           <el-icon><User /></el-icon>
           <span>平台账号</span>
         </el-menu-item>
+        <el-menu-item index="/credentials">
+          <el-icon><Key /></el-icon>
+          <span>平台凭证</span>
+        </el-menu-item>
       </el-menu>
       <div class="source-tag">数据源：Fastify /api/v2 ← SQLite</div>
     </el-aside>

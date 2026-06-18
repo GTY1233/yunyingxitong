@@ -4,6 +4,7 @@ import AssetLibrary from "./views/AssetLibrary.vue";
 import Dashboard from "./views/Dashboard.vue";
 import Inventory from "./views/Inventory.vue";
 import ModelLibrary from "./views/ModelLibrary.vue";
+import PlatformCredentials from "./views/PlatformCredentials.vue";
 import ReferenceVideoLibrary from "./views/ReferenceVideoLibrary.vue";
 import ProductDetail from "./views/ProductDetail.vue";
 import ProductList from "./views/ProductList.vue";
@@ -20,5 +21,6 @@ export const router = createRouter({
     { path: "/models", name: "models", component: ModelLibrary },
     { path: "/reference-videos", name: "reference-videos", component: ReferenceVideoLibrary },
     { path: "/accounts", name: "accounts", component: Accounts },
+    { path: "/credentials", name: "credentials", component: PlatformCredentials },
   ],
 });

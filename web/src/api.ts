@@ -112,6 +112,48 @@ export interface ModelImage {
 
 export type ReferenceVideo = ModelImage;
 
+// 平台凭证(脱敏视图,后端绝不返明文/密文)
+export interface PlatformCredential {
+  id: string;
+  platform: string;
+  api: string;
+  label: string;
+  role: string;
+  appKey: string;
+  appSecretSet: boolean;
+  shopId: string;
+  runMode: "demo" | "real" | "manual";
+  status: string;
+  lastError: string;
+  tokenSet: boolean;
+  tokenExpiresAt: string | null;
+}
+
+export interface CredentialConfigInput {
+  platform: string;
+  api: string;
+  label?: string;
+  role?: string;
+  appKey?: string;
+  appSecret?: string;
+}
+
+export interface CredentialTokenInput {
+  accessToken: string;
+  refreshToken?: string;
+  shopId?: string;
+  expiresInSec?: number;
+  refreshExpiresInSec?: number;
+}
+
+export interface OAuthGuide {
+  flow: string;
+  authConsole: string;
+  tokenTemplate: string;
+  steps: string[];
+  note: string;
+}
+
 export const api = {
   getStats: () => request<DashboardStats>("/api/v2/stats"),
   getWorkbench: () => request<Workbench>("/api/v2/workbench"),
@@ -175,4 +217,26 @@ export const api = {
   deleteAsset: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/api/v2/assets/${id}`, { method: "DELETE" }),
   listAccounts: () => request<Account[]>("/api/v2/accounts"),
+  listCredentials: () => request<PlatformCredential[]>("/api/v2/platform-credentials"),
+  saveCredential: (body: CredentialConfigInput) =>
+    request<PlatformCredential>("/api/v2/platform-credentials", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  setCredentialRunMode: (id: string, runMode: string) =>
+    request<PlatformCredential>(`/api/v2/platform-credentials/${id}/run-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ runMode }),
+    }),
+  saveCredentialTokens: (id: string, body: CredentialTokenInput) =>
+    request<PlatformCredential>(`/api/v2/platform-credentials/${id}/tokens`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getCredentialOAuthUrl: (id: string) =>
+    request<OAuthGuide>(`/api/v2/platform-credentials/${id}/oauth-url`),
+  deleteCredential: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/v2/platform-credentials/${id}`, {
+      method: "DELETE",
+    }),
 };
