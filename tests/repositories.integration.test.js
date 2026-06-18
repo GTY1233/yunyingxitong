@@ -11,6 +11,7 @@ const TEST_DB = path.join(process.cwd(), "prisma", "test.db");
 process.env.DATABASE_URL = "file:./test.db";
 const repos = (await import("../lib/repositories/index.js")).default;
 const engine = (await import("../lib/workflow/service.js")).default;
+const platformExec = (await import("../lib/workflow/platform-executors.js")).default;
 
 beforeAll(() => {
   // 测试不调真实生成 API,强制模板兜底(本地 .env 可能带密钥)
@@ -109,7 +110,14 @@ describe("仓储层 CRUD + 派生状态(对临时库)", () => {
 
 describe("工作流引擎(对临时库)", () => {
   it("创建淘宝工作流并逐节点推进到已完成", async () => {
-    const p = await repos.products.create({ name: "工作流商品", stock: 10 });
+    // 商品要够完整,create_listing 节点的完整度门槛才放行
+    const p = await repos.products.create({
+      name: "工作流商品",
+      priceCents: 9900,
+      stock: 10,
+      sellingPoints: "好用又便宜",
+    });
+    await repos.assets.create({ productId: p.id, kind: "image", status: "已生成", name: "主图" });
     let wf = await engine.createForProduct(p.id, "淘宝");
     expect(wf.nodes.length).toBe(6);
     expect(wf.nodes[0].status).toBe("已成功"); // 商品资料自动完成
@@ -198,5 +206,37 @@ describe("平台凭证仓储(加密落库,对临时库)", () => {
     expect(after.status).toBe("已授权");
     expect(after.accessTokenEnc.startsWith("v1:")).toBe(true);
     expect(after.tokenExpiresAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("上架执行器(demo,对临时库)", () => {
+  it("完整度不足 → 失败并提示缺什么", async () => {
+    const p = await repos.products.create({ name: "缺料商品", stock: 1 });
+    const r = await platformExec.executeListingNode(p, "抖音");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/不完整/);
+  });
+
+  it("完整商品 demo 上架 → 建映射,二次执行幂等跳过", async () => {
+    const p = await repos.products.create({
+      name: "可上架商品",
+      priceCents: 5000,
+      stock: 9,
+      sellingPoints: "卖点",
+    });
+    await repos.assets.create({ productId: p.id, kind: "image", status: "已生成", name: "主图" });
+
+    const r1 = await platformExec.executeListingNode(p, "抖音");
+    expect(r1.ok).toBe(true);
+    expect(r1.summary).toMatch(/演示上架成功/);
+
+    const m = await repos.client.getPrisma().platformProductMapping.findUnique({
+      where: { productId_platform: { productId: p.id, platform: "抖音" } },
+    });
+    expect(m).not.toBeNull();
+    expect(m.externalProductId).toMatch(/^抖音商品-DEMO-/);
+
+    const r2 = await platformExec.executeListingNode(p, "抖音");
+    expect(r2.summary).toMatch(/跳过/);
   });
 });
