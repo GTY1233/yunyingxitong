@@ -14,6 +14,7 @@ import { accountRoutes } from "./routes/accounts.js";
 import { assetRoutes } from "./routes/assets.js";
 import { healthRoutes } from "./routes/health.js";
 import { modelImageRoutes } from "./routes/model-images.js";
+import { platformCredentialRoutes } from "./routes/platform-credentials.js";
 import { productRoutes } from "./routes/products.js";
 import { referenceVideoRoutes } from "./routes/reference-videos.js";
 import { statsRoutes } from "./routes/stats.js";
@@ -92,6 +93,7 @@ async function main() {
   await uploadRoutes(app);
   await modelImageRoutes(app);
   await referenceVideoRoutes(app);
+  await platformCredentialRoutes(app);
 
   // 重启后清理残留「执行中」节点(后台任务已随进程丢失)
   try {

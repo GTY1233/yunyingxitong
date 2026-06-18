@@ -47,6 +47,7 @@ interface Repos {
     getDecrypted(id: string): Promise<any>;
     setRunMode(id: string, runMode: string): Promise<any>;
     setStatus(id: string, status: string, lastError?: string): Promise<any>;
+    softDelete(id: string): Promise<any>;
     maskView(c: any): any;
   };
   workflows: {
