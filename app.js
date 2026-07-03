@@ -699,7 +699,7 @@ async function persistState() {
   try {
     await fetch("/api/state", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-app-key": "local-ui" },
       body: JSON.stringify(getDataState()),
     });
   } catch (error) {

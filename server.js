@@ -894,6 +894,11 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && req.url === "/api/state") {
+    // 自定义头挡跨站伪造请求（浏览器跨域无法带自定义头）；旧前端已同步携带
+    if (req.headers["x-app-key"] !== "local-ui") {
+      sendJson(res, 403, { error: "forbidden" });
+      return true;
+    }
     try {
       const body = await readBody(req);
       sendJson(res, 200, { ok: true, data: writeDb(JSON.parse(body || "{}")) });
@@ -2096,7 +2101,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// 仅监听本机（旧栈无鉴权，不得暴露到局域网；新栈见 src/server.ts）
+server.listen(PORT, "127.0.0.1", () => {
   resumePendingGenerationTasks();
   console.log(`AI ecommerce ops MVP is running at http://localhost:${PORT}`);
 });
