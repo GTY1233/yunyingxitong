@@ -1,14 +1,62 @@
 import type { FastifyInstance } from "fastify";
+// @ts-ignore CommonJS 业务模块暂无类型声明
+import runMode from "../../lib/platform/run-mode.js";
 import engine from "../engine.js";
 import { AppError } from "../lib/errors.js";
+import repos from "../repos.js";
 
 const idParam = { type: "object", required: ["id"], properties: { id: { type: "string" } } };
+
+// 平台 → 上架凭证通道(当前仅抖音真接;其余无凭证 → 按环境推导,默认演示)。
+const PLATFORM_SHOP_API: Record<string, string> = { 抖音: "douyin_shop" };
 
 export async function workflowRoutes(app: FastifyInstance) {
   app.get(
     "/api/v2/workflow-templates",
-    { schema: { tags: ["workflows"], summary: "三平台链模板" } },
-    async () => ({ ok: true, data: engine.templates() })
+    { schema: { tags: ["workflows"], summary: "三平台链模板(含每平台当前运行模式)" } },
+    async () => {
+      const templates = engine.templates();
+      const withMode = await Promise.all(
+        templates.map(async (t) => {
+          const api = PLATFORM_SHOP_API[t.platform];
+          const cred = api ? await repos.credentials.getByApi(t.platform, api) : null;
+          return { ...t, runMode: runMode.resolveRunMode(cred) as "demo" | "real" | "manual" };
+        })
+      );
+      return { ok: true, data: withMode };
+    }
+  );
+
+  // 审核中心收件箱:全部活跃工作流里等人处理的节点(待确认=审核点、失败=待重试)。
+  app.get(
+    "/api/v2/review-queue",
+    { schema: { tags: ["workflows"], summary: "审核队列(待确认/失败节点一站式)" } },
+    async () => ({ ok: true, data: await engine.reviewQueue() })
+  );
+
+  // 自动流水线开关:开启后节点成功自动推进,只停在待确认/失败。
+  app.patch<{ Params: { id: string }; Body: { enable: boolean } }>(
+    "/api/v2/workflows/:id/auto",
+    {
+      schema: {
+        tags: ["workflows"],
+        summary: "开/关自动流水线(开启即尝试推进当前节点)",
+        params: idParam,
+        body: {
+          type: "object",
+          required: ["enable"],
+          properties: { enable: { type: "boolean" } },
+        },
+      },
+    },
+    async (req) => {
+      try {
+        const wf = await engine.setAutoMode(req.params.id, req.body.enable);
+        return { ok: true, data: wf };
+      } catch (e) {
+        throw new AppError((e as Error).message, 400, "WORKFLOW_AUTO_FAILED");
+      }
+    }
   );
 
   app.get<{ Params: { id: string } }>(
@@ -46,12 +94,13 @@ export async function workflowRoutes(app: FastifyInstance) {
   );
 
   // 批量启动:一个商品 × 多平台,逐平台建链;已存在进行中链的平台不算硬失败,返回其原因。
-  app.post<{ Body: { productId: string; platforms: string[] } }>(
+  // autoRun=true:创建即开自动流水线,生成节点自动跑,停在预览确认等人审核。
+  app.post<{ Body: { productId: string; platforms: string[]; autoRun?: boolean } }>(
     "/api/v2/workflows/batch",
     {
       schema: {
         tags: ["workflows"],
-        summary: "批量为商品启动多平台工作流",
+        summary: "批量为商品启动多平台工作流(可选自动流水线)",
         body: {
           type: "object",
           required: ["productId", "platforms"],
@@ -63,16 +112,17 @@ export async function workflowRoutes(app: FastifyInstance) {
               minItems: 1,
               items: { type: "string", enum: ["抖音", "小红书", "淘宝"] },
             },
+            autoRun: { type: "boolean" },
           },
         },
       },
     },
     async (req) => {
-      const { productId, platforms } = req.body;
+      const { productId, platforms, autoRun } = req.body;
       const results = [];
       for (const platform of platforms) {
         try {
-          const wf = await engine.createForProduct(productId, platform);
+          const wf = await engine.createForProduct(productId, platform, { autoMode: !!autoRun });
           results.push({ platform, ok: true, workflowId: wf.id, status: wf.status });
         } catch (e) {
           results.push({ platform, ok: false, error: (e as Error).message });

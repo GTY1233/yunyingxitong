@@ -18,7 +18,7 @@ jobs:
         run: npm install
       # 阶段 0：先只对新代码 + 配置做严格检查；存量文件做一次性 `npm run fix` 后再纳入全量范围。
       - name: Lint & format (new code + config)
-        run: npx biome ci src lib/repositories lib/workflow lib/security lib/platform tests biome.json package.json tsconfig.json vitest.config.mjs ecosystem.config.cjs
+        run: npx biome ci src lib/repositories lib/workflow lib/security lib/platform lib/compliance lib/copy-adapter.js tests biome.json package.json tsconfig.json vitest.config.mjs ecosystem.config.cjs
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Test

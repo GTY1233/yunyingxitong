@@ -240,3 +240,91 @@ describe("上架执行器(demo,对临时库)", () => {
     expect(r2.summary).toMatch(/跳过/);
   });
 });
+
+describe("自动流水线(autoMode,对临时库)", () => {
+  it("创建即自动跑到审核点;确认后自动续跑;直至完成", async () => {
+    const p = await repos.products.create({
+      name: "自动流商品",
+      priceCents: 8800,
+      stock: 5,
+      sellingPoints: "顺滑亲肤",
+    });
+    await repos.assets.create({ productId: p.id, kind: "image", status: "已生成", name: "主图" });
+
+    // 淘宝链:资料(自动完成)→主图(生成)→文案(生成)→预览确认→上架→数据回流
+    let wf = await engine.createForProduct(p.id, "淘宝", { autoMode: true, sync: true });
+    expect(wf.autoMode).toBe(true);
+    // 两个生成节点已被自动执行,链停在「预览确认」审核点
+    let waiting = wf.nodes.find((n) => n.status === "待确认");
+    expect(waiting?.label).toBe("预览确认");
+    expect(wf.nodes.filter((n) => n.status === "已成功").length).toBe(3);
+
+    // 人通过审核点 → 自动执行上架 → 停在「数据回流」观测点
+    wf = await engine.act(wf.id, waiting.id, "confirm", { sync: true });
+    expect(wf.nodes.find((n) => n.label === "店铺上架").status).toBe("已成功");
+    waiting = wf.nodes.find((n) => n.status === "待确认");
+    expect(waiting?.label).toBe("数据回流");
+
+    // 最后一个观测点确认 → 全链完成
+    wf = await engine.act(wf.id, waiting.id, "confirm", { sync: true });
+    expect(wf.status).toBe("已完成");
+    expect(wf.progress).toBe(100);
+  });
+
+  it("审核队列能看到停下来等人的节点", async () => {
+    const p = await repos.products.create({
+      name: "审核队列商品",
+      priceCents: 6600,
+      stock: 2,
+      sellingPoints: "轻薄透气",
+    });
+    await repos.assets.create({ productId: p.id, kind: "image", status: "已生成", name: "主图" });
+    const wf = await engine.createForProduct(p.id, "淘宝", { autoMode: true, sync: true });
+    const q = await engine.reviewQueue();
+    const mine = q.items.find((i) => i.workflowId === wf.id);
+    expect(mine).toBeTruthy();
+    expect(mine.status).toBe("待确认");
+    expect(mine.nodeLabel).toBe("预览确认");
+    expect(mine.productName).toBe("审核队列商品");
+    expect(q.counts.pending).toBeGreaterThan(0);
+  });
+});
+
+describe("上架合规闸门(抖音规则,对临时库)", () => {
+  it("禁售款词/低俗词命中 → 合规拦截,不进上架", async () => {
+    const p = await repos.products.create({
+      name: "性感情趣内衣丁字裤",
+      priceCents: 3000,
+      stock: 3,
+      sellingPoints: "诱惑",
+    });
+    await repos.assets.create({ productId: p.id, kind: "image", status: "已生成", name: "主图" });
+    const r = await platformExec.executeListingNode(p, "抖音");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/合规拦截/);
+    expect(r.error).toMatch(/丁字裤/);
+  });
+
+  it("文案生成产物:自动净化敏感词 + 追加 AI 标识 + 打 isAiGenerated", async () => {
+    const p = await repos.products.create({
+      name: "情趣内衣蕾丝款",
+      priceCents: 4500,
+      stock: 4,
+      sellingPoints: "性感撩人",
+      platforms: JSON.stringify(["抖音"]),
+    });
+    const wf = await engine.createForProduct(p.id, "抖音");
+    const copyNode = wf.nodes.find((n) => n.kind === "copy");
+    // 直推文案节点(跳过前面的图片节点直接测 copy 执行器)
+    const executors = (await import("../lib/workflow/executors.js")).default;
+    const r = await executors.executeGenerateNode(copyNode, p, {}, "抖音");
+    expect(r.ok).toBe(true);
+    const copies = await repos.assets.listByProduct(p.id, "copy");
+    expect(copies.length).toBeGreaterThan(0);
+    for (const c of copies) {
+      expect(c.isAiGenerated).toBe(true);
+      expect(c.content).toMatch(/AI辅助生成/); // 显式标识
+      expect(c.content).not.toMatch(/情趣内衣/); // 敏感词已净化(模板文案含商品名)
+    }
+  });
+});

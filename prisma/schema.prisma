@@ -12,18 +12,19 @@ generator client {
 }
 
 model Product {
-  id            String   @id @default(cuid())
-  displayCode   String?  @map("display_code") // 旧业务编号 P1027，便于对照
-  skuCode       String?  @map("sku_code")
+  tenantId      String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id            String  @id @default(cuid())
+  displayCode   String? @map("display_code") // 旧业务编号 P1027，便于对照
+  skuCode       String? @map("sku_code")
   name          String
   category      String?
-  priceCents    Int?     @map("price_cents") // 统一存“分”，杜绝浮点
-  stock         Int      @default(0)
-  warningStock  Int      @default(0) @map("warning_stock")
-  sellingPoints String?  @map("selling_points")
+  priceCents    Int?    @map("price_cents") // 统一存“分”，杜绝浮点
+  stock         Int     @default(0)
+  warningStock  Int     @default(0) @map("warning_stock")
+  sellingPoints String? @map("selling_points")
   specs         String?
-  platforms     String?  // JSON 字符串
-  colors        String?  // JSON 字符串
+  platforms     String? // JSON 字符串
+  colors        String? // JSON 字符串
   status        String?
 
   assets          Asset[]
@@ -42,6 +43,7 @@ model Product {
 }
 
 model Account {
+  tenantId String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id       String  @id @default(cuid())
   platform String?
   name     String?
@@ -63,22 +65,25 @@ model Account {
 }
 
 model Asset {
-  id                String   @id @default(cuid())
-  productId         String   @map("product_id")
-  generationTaskId  String?  @map("generation_task_id") // 仅作引用，不建强关系，避免循环
-  kind              String   // image | copy | video
-  type              String?
-  name              String?
-  status            String?
-  usage             String?
-  version           String?
-  provider          String?
-  isPrimary         Boolean  @default(false) @map("is_primary")
-  content           String?
-  mediaUrl          String?  @map("media_url") // 导入时重指向 media-backup 本地文件
-  posterUrl         String?  @map("poster_url")
-  aspectRatio       String?  @map("aspect_ratio")
-  duration          String?
+  tenantId         String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id               String  @id @default(cuid())
+  productId        String  @map("product_id")
+  generationTaskId String? @map("generation_task_id") // 仅作引用，不建强关系，避免循环
+  kind             String // image | copy | video
+  type             String?
+  name             String?
+  status           String?
+  usage            String?
+  version          String?
+  provider         String?
+  isPrimary        Boolean @default(false) @map("is_primary")
+  isAiGenerated    Boolean @default(false) @map("is_ai_generated") // AIGC 标识(2025-09 法规:AI 生成内容须显式标识)
+  aiNote           String? @map("ai_note") // 标识说明(如「内容由AI辅助生成」)
+  content          String?
+  mediaUrl         String? @map("media_url") // 导入时重指向 media-backup 本地文件
+  posterUrl        String? @map("poster_url")
+  aspectRatio      String? @map("aspect_ratio")
+  duration         String?
 
   product Product @relation(fields: [productId], references: [id])
 
@@ -91,12 +96,14 @@ model Asset {
 }
 
 model PlatformWorkflow {
+  tenantId      String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id            String  @id @default(cuid())
   productId     String  @map("product_id")
   platform      String
   template      String?
   status        String?
   currentNodeId String? @map("current_node_id")
+  autoMode      Boolean @default(false) @map("auto_mode") // 自动流水线:节点成功后自动推进,停在待确认/失败
 
   product Product        @relation(fields: [productId], references: [id])
   nodes   WorkflowNode[]
@@ -132,19 +139,20 @@ model WorkflowNode {
 }
 
 model GenerationTask {
-  id                 String   @id @default(cuid())
-  productId          String   @map("product_id")
-  platformWorkflowId String?  @map("platform_workflow_id")
-  assetId            String?  @map("asset_id")
+  tenantId           String    @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id                 String    @id @default(cuid())
+  productId          String    @map("product_id")
+  platformWorkflowId String?   @map("platform_workflow_id")
+  assetId            String?   @map("asset_id")
   kind               String?
   type               String?
   label              String?
-  params             String?  // JSON
+  params             String? // JSON
   status             String?
   provider           String?
   error              String?
-  attempts           Int      @default(0)
-  maxAttempts        Int      @default(2) @map("max_attempts")
+  attempts           Int       @default(0)
+  maxAttempts        Int       @default(2) @map("max_attempts")
   startedAt          DateTime? @map("started_at")
   finishedAt         DateTime? @map("finished_at")
 
@@ -159,21 +167,22 @@ model GenerationTask {
 }
 
 model ListingTask {
-  id                  String   @id @default(cuid())
-  productId           String   @map("product_id")
-  accountId           String?  @map("account_id")
-  platform            String?
-  status              String?
-  completeness        Int      @default(0)
-  missing             String?  // JSON
-  mode                String?
-  platformMode        String?  @map("platform_mode")
-  platformCapability  String?  @map("platform_capability")
-  externalId          String?  @map("external_id")
-  platformResponse    String?  @map("platform_response") // JSON
-  failureReason       String?  @map("failure_reason")
-  attempts            Int      @default(0)
-  maxAttempts         Int      @default(2) @map("max_attempts")
+  tenantId           String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id                 String  @id @default(cuid())
+  productId          String  @map("product_id")
+  accountId          String? @map("account_id")
+  platform           String?
+  status             String?
+  completeness       Int     @default(0)
+  missing            String? // JSON
+  mode               String?
+  platformMode       String? @map("platform_mode")
+  platformCapability String? @map("platform_capability")
+  externalId         String? @map("external_id")
+  platformResponse   String? @map("platform_response") // JSON
+  failureReason      String? @map("failure_reason")
+  attempts           Int     @default(0)
+  maxAttempts        Int     @default(2) @map("max_attempts")
 
   product Product  @relation(fields: [productId], references: [id])
   account Account? @relation(fields: [accountId], references: [id])
@@ -187,20 +196,21 @@ model ListingTask {
 }
 
 model PublishTask {
-  id            String   @id @default(cuid())
-  productId     String   @map("product_id")
-  accountId     String?  @map("account_id")
-  assetId       String?  @map("asset_id")
+  tenantId      String    @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id            String    @id @default(cuid())
+  productId     String    @map("product_id")
+  accountId     String?   @map("account_id")
+  assetId       String?   @map("asset_id")
   platform      String?
   status        String?
-  scheduleSlot  String?  @map("schedule_slot")
+  scheduleSlot  String?   @map("schedule_slot")
   scheduledAt   DateTime? @map("scheduled_at") // 真实时间，替代 "今天18:00"
   publishedAt   DateTime? @map("published_at")
-  attachProduct Boolean  @default(true) @map("attach_product")
+  attachProduct Boolean   @default(true) @map("attach_product")
   mode          String?
-  failureReason String?  @map("failure_reason")
-  attempts      Int      @default(0)
-  maxAttempts   Int      @default(2) @map("max_attempts")
+  failureReason String?   @map("failure_reason")
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(2) @map("max_attempts")
 
   product Product  @relation(fields: [productId], references: [id])
   account Account? @relation(fields: [accountId], references: [id])
@@ -214,6 +224,7 @@ model PublishTask {
 }
 
 model PlatformProductMapping {
+  tenantId          String @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id                String @id @default(cuid())
   productId         String @map("product_id")
   platform          String
@@ -229,8 +240,9 @@ model PlatformProductMapping {
 }
 
 model OperationLog {
-  id        String   @id @default(cuid())
-  productId String?  @map("product_id")
+  tenantId  String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
+  id        String  @id @default(cuid())
+  productId String? @map("product_id")
   kind      String?
   message   String?
   level     String?
@@ -245,6 +257,7 @@ model OperationLog {
 
 // 模特图库（全局,不绑定商品;换装生图时选一张作 node41 模特图）
 model ModelImage {
+  tenantId  String    @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id        String    @id @default(cuid())
   name      String?
   mediaUrl  String    @map("media_url") // uploads/model-xxx.png
@@ -256,6 +269,7 @@ model ModelImage {
 
 // 参考视频库（全局;生视频时选一段作 node161 参考视频,决定动作/节奏）
 model ReferenceVideo {
+  tenantId  String    @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id        String    @id @default(cuid())
   name      String?
   mediaUrl  String    @map("media_url") // uploads/refvideo-xxx.mp4
@@ -268,6 +282,7 @@ model ReferenceVideo {
 // 平台凭证（app_key/secret/token;secret 与 token 字段为 AES-GCM 密文）
 // api:douyin_shop(上架)| douyin_open(发布)。runMode:demo|real|manual。
 model PlatformCredential {
+  tenantId String  @default("default") @map("tenant_id") // 多租户预留:自用期恒为 default,售卖时按租户过滤
   id       String  @id @default(cuid())
   platform String // 抖音
   api      String // douyin_shop | douyin_open
