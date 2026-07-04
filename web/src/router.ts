@@ -8,6 +8,7 @@ import PlatformCredentials from "./views/PlatformCredentials.vue";
 import ReferenceVideoLibrary from "./views/ReferenceVideoLibrary.vue";
 import ProductDetail from "./views/ProductDetail.vue";
 import ProductList from "./views/ProductList.vue";
+import ReviewCenter from "./views/ReviewCenter.vue";
 import WorkflowLauncher from "./views/WorkflowLauncher.vue";
 
 export const router = createRouter({
@@ -16,6 +17,7 @@ export const router = createRouter({
     { path: "/", redirect: "/dashboard" },
     { path: "/dashboard", name: "dashboard", component: Dashboard },
     { path: "/launch", name: "launch", component: WorkflowLauncher },
+    { path: "/review", name: "review", component: ReviewCenter },
     { path: "/products", name: "products", component: ProductList },
     { path: "/products/:id", name: "product-detail", component: ProductDetail },
     { path: "/inventory", name: "inventory", component: Inventory },

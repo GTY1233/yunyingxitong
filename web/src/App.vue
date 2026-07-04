@@ -1,18 +1,36 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { api } from "./api";
 
 const route = useRoute();
 // 商品详情归到「商品·工作流」菜单高亮
 const activeMenu = computed(() =>
   route.path.startsWith("/products") ? "/products" : route.path
 );
+
+// 审核中心待办数徽标(每 60 秒静默刷新,失败忽略)
+const reviewCount = ref(0);
+let reviewTimer: ReturnType<typeof setInterval> | undefined;
+async function refreshReviewCount() {
+  try {
+    const q = await api.getReviewQueue();
+    reviewCount.value = q.counts.pending + q.counts.failed;
+  } catch {}
+}
+onMounted(() => {
+  refreshReviewCount();
+  reviewTimer = setInterval(refreshReviewCount, 60_000);
+});
+onUnmounted(() => {
+  if (reviewTimer) clearInterval(reviewTimer);
+});
 </script>
 
 <template>
   <el-container style="height: 100vh">
     <el-aside width="220px" class="aside">
-      <div class="brand">云营系统 <small>新架构预览（阶段二/四）</small></div>
+      <div class="brand">云营系统 <small>AI 电商自动运营</small></div>
       <el-menu :default-active="activeMenu" router>
         <el-menu-item index="/dashboard">
           <el-icon><HomeFilled /></el-icon>
@@ -21,6 +39,11 @@ const activeMenu = computed(() =>
         <el-menu-item index="/launch">
           <el-icon><Promotion /></el-icon>
           <span>工作流启动</span>
+        </el-menu-item>
+        <el-menu-item index="/review">
+          <el-icon><BellFilled /></el-icon>
+          <span>审核中心</span>
+          <el-badge :value="reviewCount" :hidden="!reviewCount" style="margin-left: 6px" />
         </el-menu-item>
         <el-menu-item index="/products">
           <el-icon><Goods /></el-icon>
@@ -51,7 +74,7 @@ const activeMenu = computed(() =>
           <span>平台凭证</span>
         </el-menu-item>
       </el-menu>
-      <div class="source-tag">数据源：Fastify /api/v2 ← SQLite</div>
+      <div class="source-tag">v0.9 内测版</div>
     </el-aside>
     <el-main>
       <router-view />

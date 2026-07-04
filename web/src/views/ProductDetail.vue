@@ -197,7 +197,16 @@ async function remove() {
           style="width: 240px; border-radius: 8px"
         />
         <el-card v-else shadow="never">{{ a.content }}</el-card>
-        <div class="cap">[{{ a.kind }}] {{ a.name }}</div>
+        <div class="cap">
+          [{{ a.kind }}] {{ a.name }}
+          <el-tag
+            v-if="a.isAiGenerated"
+            size="small"
+            type="info"
+            effect="plain"
+            :title="a.aiNote || 'AI生成'"
+          >AI</el-tag>
+        </div>
       </div>
     </div>
 

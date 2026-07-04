@@ -19,6 +19,7 @@ const error = ref("");
 
 const productId = ref("");
 const selected = ref<string[]>([]);
+const autoRun = ref(true);
 const launching = ref(false);
 const results = ref<BatchLaunchResult[]>([]);
 
@@ -92,7 +93,7 @@ async function launch() {
   launching.value = true;
   results.value = [];
   try {
-    const r = await api.batchLaunchWorkflows(productId.value, selected.value);
+    const r = await api.batchLaunchWorkflows(productId.value, selected.value, autoRun.value);
     results.value = r.results;
     const okCount = r.results.filter((x) => x.ok).length;
     if (okCount) ElMessage.success(`已启动 ${okCount} 条工作流`);
@@ -154,6 +155,9 @@ function goDetail() {
 
     <el-card v-if="productId" shadow="never" style="margin-bottom: 16px">
       <div class="step-title">② 选择平台(可多选)</div>
+      <el-checkbox v-model="autoRun" style="margin-bottom: 12px">
+        创建后自动跑(AI 生成自动执行,停在审核点等你确认)
+      </el-checkbox>
       <div v-loading="existingLoading" class="platform-grid">
         <div
           v-for="t in templates"
@@ -173,6 +177,9 @@ function goDetail() {
             />
             <strong>{{ t.platform }}</strong>
             <el-tag size="small" type="info">{{ t.stepCount }} 步</el-tag>
+            <el-tag v-if="t.runMode === 'demo'" size="small" type="info">演示</el-tag>
+            <el-tag v-else-if="t.runMode === 'manual'" size="small" type="warning">人工</el-tag>
+            <el-tag v-else-if="t.runMode === 'real'" size="small" type="success">真实</el-tag>
             <el-tag v-if="activeWorkflow(t.platform)" size="small" type="warning">进行中</el-tag>
           </div>
           <div class="platform-steps">{{ t.steps.join(" → ") }}</div>
@@ -196,7 +203,7 @@ function goDetail() {
       <ul class="result-list">
         <li v-for="r in results" :key="r.platform">
           <el-tag size="small" :type="r.ok ? 'success' : 'danger'">{{ r.platform }}</el-tag>
-          <span v-if="r.ok" style="margin-left: 8px">已建立工作流</span>
+          <span v-if="r.ok" style="margin-left: 8px">{{ autoRun ? "已建立并自动开跑" : "已建立工作流" }}</span>
           <span v-else style="margin-left: 8px; color: var(--el-color-danger)">{{ r.error }}</span>
         </li>
       </ul>

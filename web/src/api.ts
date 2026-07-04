@@ -30,6 +30,8 @@ export interface Asset {
   name?: string;
   content?: string;
   mediaUrl?: string;
+  isAiGenerated?: boolean;
+  aiNote?: string;
 }
 
 export interface ProductDetail extends Product {
@@ -101,6 +103,7 @@ export interface Workflow {
   status?: string;
   currentNodeId?: string;
   progress: number;
+  autoMode: boolean;
   nodes: WorkflowNode[];
 }
 
@@ -109,6 +112,30 @@ export interface WorkflowTemplate {
   template: string;
   stepCount: number;
   steps: string[];
+  runMode: "demo" | "real" | "manual";
+}
+
+// 审核中心:自动流水线停下来等人处理的事项
+export interface ReviewItem {
+  nodeId: string;
+  workflowId: string;
+  platform: string;
+  autoMode: boolean;
+  productId: string;
+  productName: string;
+  displayCode: string;
+  nodeLabel: string;
+  nodeType: string;
+  kind: string;
+  status: "待确认" | "失败";
+  error: string;
+  hint: string;
+  updatedAt: string;
+}
+
+export interface ReviewQueue {
+  items: ReviewItem[];
+  counts: { pending: number; failed: number };
 }
 
 export interface BatchLaunchResult {
@@ -180,10 +207,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ productId, platform }),
     }),
-  batchLaunchWorkflows: (productId: string, platforms: string[]) =>
+  batchLaunchWorkflows: (productId: string, platforms: string[], autoRun?: boolean) =>
     request<{ productId: string; results: BatchLaunchResult[] }>("/api/v2/workflows/batch", {
       method: "POST",
-      body: JSON.stringify({ productId, platforms }),
+      body: JSON.stringify({ productId, platforms, autoRun }),
+    }),
+  getReviewQueue: () => request<ReviewQueue>("/api/v2/review-queue"),
+  setWorkflowAuto: (id: string, enable: boolean) =>
+    request<Workflow>(`/api/v2/workflows/${id}/auto`, {
+      method: "PATCH",
+      body: JSON.stringify({ enable }),
     }),
   workflowAction: (
     workflowId: string,

@@ -17,16 +17,23 @@ const creating = ref(false);
 const platform = ref("抖音");
 const PLATFORMS = ["抖音", "小红书", "淘宝"];
 
+// 每条链路的「自动推进」开关(wfId -> 开/关),从后端 autoMode 同步
+const autoOn = reactive<Record<string, boolean>>({});
+
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
-function anyRunning() {
-  return workflows.value.some((w) => w.nodes.some((n) => n.status === "执行中"));
+// 有节点执行中,或自动模式链路仍在执行中(节点间切换瞬间没有执行中节点,不能停表)
+function shouldPoll() {
+  return workflows.value.some(
+    (w) => w.nodes.some((n) => n.status === "执行中") || (w.autoMode && w.status === "执行中")
+  );
 }
 
 async function load(silent = false) {
   if (!silent) loading.value = true;
   try {
     workflows.value = await api.listWorkflows(props.productId);
+    for (const w of workflows.value) autoOn[w.id] = w.autoMode;
     const sig = workflows.value.map((w) => w.nodes.map((n) => n.status).join()).join("|");
     if (sig !== lastSig) {
       lastSig = sig;
@@ -37,11 +44,23 @@ async function load(silent = false) {
   } finally {
     loading.value = false;
   }
-  if (anyRunning() && !pollTimer) {
+  if (shouldPoll() && !pollTimer) {
     pollTimer = setInterval(() => load(true), 4000);
-  } else if (!anyRunning() && pollTimer) {
+  } else if (!shouldPoll() && pollTimer) {
     clearInterval(pollTimer);
     pollTimer = undefined;
+  }
+}
+
+async function onAutoChange(wf: Workflow, val: string | number | boolean) {
+  const enable = !!val;
+  try {
+    await api.setWorkflowAuto(wf.id, enable);
+    ElMessage.success(enable ? "已开启自动推进" : "已关闭自动推进");
+    await load(true);
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+    autoOn[wf.id] = !enable; // 回滚开关
   }
 }
 onMounted(() => load());
@@ -197,6 +216,12 @@ const dlgTitle = () =>
         <div class="wf-card-head">
           <strong>{{ wf.platform }}链路</strong>
           <el-tag size="small" :type="wfTagType(wf.status)">{{ wf.status }}</el-tag>
+          <el-switch
+            v-model="autoOn[wf.id]"
+            active-text="自动推进"
+            size="small"
+            @change="(val: string | number | boolean) => onAutoChange(wf, val)"
+          />
           <el-progress :percentage="wf.progress" :stroke-width="10" class="wf-progress" />
         </div>
         <ul class="nodes">
