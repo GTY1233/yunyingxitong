@@ -104,14 +104,13 @@ const versionCount = ref(3);
 // 视频
 const refVideos = ref<ReferenceVideo[]>([]);
 const selectedRefVideo = ref("");
+// 新视频工作流(app 1975951975441412098)可调项:帧率/秒数(→加载帧上限)/表情强度/胸部抖动幅度。
+// 旧的 宽/高(像素)、模式 已废弃(新工作流走分辨率预设+比例),不再传。
 const vp = reactive({
-  frameRate: 25,
-  seconds: 5,
-  videoWidth: 544,
-  videoHeight: 960,
-  mode: 1,
-  expressionIntensity: 1.0,
-  ruKilnAmplitude: 0.2,
+  frameRate: 30,
+  seconds: 7,
+  expressionIntensity: 0.6,
+  ruKilnAmplitude: 0.27,
 });
 
 const GEN_KINDS = ["image", "copy", "video"];
@@ -342,7 +341,7 @@ const dlgTitle = () =>
 
       <!-- 视频:参考视频 + 微调参数 -->
       <template v-else-if="dlgKind === 'video'">
-        <div class="field-label">参考视频(node161,选一段,决定动作/节奏)</div>
+        <div class="field-label">参考视频(node275,选一段,决定动作/节奏)</div>
         <el-empty v-if="!refVideos.length" description="参考视频库为空,请先到「参考视频库」上传" :image-size="60" />
         <div v-else class="media-grid">
           <div
@@ -356,15 +355,12 @@ const dlgTitle = () =>
             <div class="rv-name">{{ r.name }}</div>
           </div>
         </div>
-        <p class="tip">参考图自动用「最新生成的换装图」(node103)。以下参数一般用默认,可微调:</p>
+        <p class="tip">参考图自动用「最新生成的换装图」(node299)。以下参数一般用默认,可微调:</p>
         <div class="vp-grid">
           <label>帧率 <el-input-number v-model="vp.frameRate" :min="1" size="small" controls-position="right" /></label>
           <label>秒数 <el-input-number v-model="vp.seconds" :min="1" size="small" controls-position="right" /></label>
-          <label>宽 <el-input-number v-model="vp.videoWidth" :min="64" :step="16" size="small" controls-position="right" /></label>
-          <label>高 <el-input-number v-model="vp.videoHeight" :min="64" :step="16" size="small" controls-position="right" /></label>
-          <label>模式(1快/2降穿模/3身材) <el-input-number v-model="vp.mode" :min="1" :max="3" size="small" controls-position="right" /></label>
-          <label>表情强度 <el-input-number v-model="vp.expressionIntensity" :min="0" :max="3" :step="0.1" size="small" controls-position="right" /></label>
-          <label>汝窑幅度 <el-input-number v-model="vp.ruKilnAmplitude" :min="0" :max="3" :step="0.1" size="small" controls-position="right" /></label>
+          <label>表情强度 <el-input-number v-model="vp.expressionIntensity" :min="0" :max="1" :step="0.05" size="small" controls-position="right" /></label>
+          <label>胸部抖动幅度 <el-input-number v-model="vp.ruKilnAmplitude" :min="0" :max="1" :step="0.01" size="small" controls-position="right" /></label>
         </div>
       </template>
 
