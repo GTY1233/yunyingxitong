@@ -168,6 +168,12 @@ export async function workflowRoutes(app: FastifyInstance) {
             modelImageId: { type: "string" },
             prompt: { type: "string" },
             versionCount: { type: "integer", minimum: 1, maximum: 5 },
+            // 换装图档位:姿势(1保持原姿势/2站立)、胸部(1默认/2D-E饱满纯欲/3C标准/4A-B小巧)、
+            // 腰臀比(1标准/2强化)、输出方式(1直出/2ZIP绕安审)
+            poseMode: { type: "string" },
+            chestMode: { type: "string" },
+            waistHipMode: { type: "string" },
+            outputMode: { type: "string" },
             referenceVideoId: { type: "string" },
             frameRate: { type: "integer" },
             seconds: { type: "integer" },

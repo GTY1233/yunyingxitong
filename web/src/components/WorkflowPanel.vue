@@ -93,6 +93,11 @@ const pending = ref<{ wfId: string; nodeId: string; regen: boolean } | null>(nul
 const models = ref<ModelImage[]>([]);
 const selectedModel = ref("");
 const imgPrompt = ref(DEFAULT_TRYON_PROMPT);
+// 换装图档位(都可选,默认 "1")
+const imgPose = ref("1"); // 姿势
+const imgChest = ref("1"); // 胸部
+const imgWaist = ref("1"); // 腰臀比
+const imgOutput = ref("1"); // 输出方式
 // 文案
 const copyPrompt = ref("");
 const versionCount = ref(3);
@@ -118,6 +123,10 @@ async function runAction(wfId: string, nodeId: string, action: string, kind?: st
     if (kind === "image") {
       selectedModel.value = "";
       imgPrompt.value = DEFAULT_TRYON_PROMPT;
+      imgPose.value = "1";
+      imgChest.value = "1";
+      imgWaist.value = "1";
+      imgOutput.value = "1";
       models.value = await api.listModelImages().catch(() => []);
     } else if (kind === "copy") {
       copyPrompt.value = "";
@@ -147,7 +156,14 @@ async function confirmGenerate() {
   let params: Record<string, unknown> = {};
   if (dlgKind.value === "image") {
     if (!selectedModel.value) return ElMessage.warning("请选择一张模特图");
-    params = { modelImageId: selectedModel.value, prompt: imgPrompt.value };
+    params = {
+      modelImageId: selectedModel.value,
+      prompt: imgPrompt.value,
+      poseMode: imgPose.value,
+      chestMode: imgChest.value,
+      waistHipMode: imgWaist.value,
+      outputMode: imgOutput.value,
+    };
   } else if (dlgKind.value === "copy") {
     params = { prompt: copyPrompt.value || undefined, versionCount: versionCount.value };
   } else if (dlgKind.value === "video") {
@@ -284,6 +300,35 @@ const dlgTitle = () =>
         </div>
         <div class="field-label">换装提示词(node68,默认已填,可改)</div>
         <el-input v-model="imgPrompt" type="textarea" :rows="3" />
+        <div class="vp-grid" style="margin-top: 12px">
+          <label>姿势
+            <el-select v-model="imgPose" size="small" style="width: 180px">
+              <el-option label="保持原姿势(默认)" value="1" />
+              <el-option label="站立姿势" value="2" />
+            </el-select>
+          </label>
+          <label>胸部
+            <el-select v-model="imgChest" size="small" style="width: 180px">
+              <el-option label="默认不改变(默认)" value="1" />
+              <el-option label="D/E 饱满纯欲不夸张" value="2" />
+              <el-option label="C 标准自然百搭" value="3" />
+              <el-option label="A/B 小巧清纯" value="4" />
+            </el-select>
+          </label>
+          <label>腰臀比
+            <el-select v-model="imgWaist" size="small" style="width: 180px">
+              <el-option label="标准(默认)" value="1" />
+              <el-option label="强化" value="2" />
+            </el-select>
+          </label>
+          <label>输出方式
+            <el-select v-model="imgOutput" size="small" style="width: 180px">
+              <el-option label="直出(默认)" value="1" />
+              <el-option label="ZIP" value="2" />
+            </el-select>
+          </label>
+        </div>
+        <p v-if="imgOutput === '2'" class="tip">ZIP:打包输出,绕过内容安审,图更不容易被拦。</p>
         <p class="tip">服装图自动用该商品的「商品原图」(node79)。</p>
       </template>
 

@@ -43,14 +43,46 @@ describe("换装图工作流:app 与节点映射", () => {
     expect(n["23"]).toMatchObject({ fieldName: "image", fieldValue: CLOTH }); // 服装
     expect(n["102"]).toMatchObject({ fieldName: "text" }); // 提示词用 text
     expect(n["102"].fieldValue).toContain("换成图2");
-    expect(n["105"]).toMatchObject({ fieldName: "select", fieldValue: "2" }); // 姿势
-    expect(n["120"].fieldValue).toBe("4"); // 胸部
-    expect(n["114"].fieldValue).toBe("2"); // 腰臀比
+    // 默认档位对齐工作流界面(全 1:保持原姿势/默认不改变/标准/直出)
+    expect(n["105"]).toMatchObject({ fieldName: "select", fieldValue: "1" }); // 姿势
+    expect(n["120"].fieldValue).toBe("1"); // 胸部
+    expect(n["114"].fieldValue).toBe("1"); // 腰臀比
     expect(n["131"].fieldValue).toBe("1"); // 输出方式
     // 不应残留旧工作流节点
     expect(n["41"]).toBeUndefined();
     expect(n["79"]).toBeUndefined();
     expect(n["68"]).toBeUndefined();
+  });
+
+  it("用户选档位覆盖到节点:胸部D/E饱满纯欲(120=2)、腰臀比强化(114=2)、ZIP输出(131=2)", async () => {
+    const list = await imageAdapter.buildAiAppImageNodeInfo(
+      { name: "睡裙" },
+      {
+        runningHub: IMG_TPL.runningHub,
+        modelImageUrls: [MODEL],
+        referenceImageUrls: [CLOTH],
+        poseMode: "2", // 站立姿势
+        chestMode: "2", // D/E 饱满纯欲不夸张
+        waistHipMode: "2", // 强化
+        outputMode: "2", // ZIP
+      },
+      {}
+    );
+    const n = byNode(list);
+    expect(n["105"].fieldValue).toBe("2");
+    expect(n["120"].fieldValue).toBe("2");
+    expect(n["114"].fieldValue).toBe("2");
+    expect(n["131"].fieldValue).toBe("2");
+  });
+
+  it("overrideImageDefaults:未传的档位保留默认,不被空串覆盖", () => {
+    const base = [
+      { nodeId: "105", fieldValue: "1" },
+      { nodeId: "120", fieldValue: "1" },
+    ];
+    const out = byNode(imageAdapter.overrideImageDefaults(base, { chestMode: "3" }));
+    expect(out["105"].fieldValue).toBe("1"); // 未传 → 保留
+    expect(out["120"].fieldValue).toBe("3"); // 传了 → 覆盖
   });
 });
 
