@@ -49,6 +49,19 @@ export interface Account {
   auth?: string;
   rule?: string;
   isDemo?: boolean;
+  publishHandle?: string;
+}
+
+// 发布素材包:一个商品生成好的可发布视频 + 文案 + 标签
+export interface PublishPackage {
+  productName: string;
+  ready: boolean;
+  videoUrl: string;
+  coverUrl: string;
+  title: string;
+  desc: string;
+  tags: string[];
+  autoPublishEnabled: boolean;
 }
 
 export interface DashboardStats {
@@ -271,6 +284,13 @@ export const api = {
   deleteAsset: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/api/v2/assets/${id}`, { method: "DELETE" }),
   listAccounts: () => request<Account[]>("/api/v2/accounts"),
+  setAccountPublishHandle: (id: string, publishHandle: string) =>
+    request<Account>(`/api/v2/accounts/${id}/publish-handle`, {
+      method: "PATCH",
+      body: JSON.stringify({ publishHandle }),
+    }),
+  getPublishPackage: (productId: string) =>
+    request<PublishPackage>(`/api/v2/products/${productId}/publish-package`),
   listCredentials: () => request<PlatformCredential[]>("/api/v2/platform-credentials"),
   saveCredential: (body: CredentialConfigInput) =>
     request<PlatformCredential>("/api/v2/platform-credentials", {

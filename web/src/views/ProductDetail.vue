@@ -2,7 +2,7 @@
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api, type NewProduct, type ProductDetail } from "../api";
+import { api, type NewProduct, type ProductDetail, type PublishPackage } from "../api";
 import WorkflowPanel from "../components/WorkflowPanel.vue";
 
 const route = useRoute();
@@ -33,7 +33,10 @@ async function load(silent = false) {
     loading.value = false;
   }
 }
-onMounted(() => load());
+onMounted(async () => {
+  await load();
+  if (product.value) await loadPackage();
+});
 
 function mediaSrc(url?: string) {
   if (!url) return "";
@@ -43,6 +46,34 @@ function mediaSrc(url?: string) {
 // 原图(上传输入)与生成素材(产出)分开展示
 const originals = computed(() => product.value?.assets.filter((a) => a.kind === "original") || []);
 const outputs = computed(() => product.value?.assets.filter((a) => a.kind !== "original") || []);
+
+// 发布素材:生成好的可发布视频 + 文案 + 标签
+const pkg = ref<PublishPackage | null>(null);
+const pkgLoading = ref(false);
+const pkgError = ref("");
+
+async function loadPackage() {
+  const p = product.value;
+  if (!p) return;
+  pkgLoading.value = true;
+  try {
+    pkg.value = await api.getPublishPackage(p.id);
+    pkgError.value = "";
+  } catch (e) {
+    pkgError.value = (e as Error).message;
+  } finally {
+    pkgLoading.value = false;
+  }
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    ElMessage.success("已复制");
+  } catch {
+    ElMessage.error("复制失败");
+  }
+}
 
 async function customUpload(opt: any) {
   if (!product.value) return;
@@ -210,6 +241,81 @@ async function remove() {
       </div>
     </div>
 
+    <h3>发布素材</h3>
+    <el-skeleton v-if="pkgLoading" :rows="3" animated />
+    <el-alert
+      v-else-if="pkgError"
+      :title="`加载失败：${pkgError}`"
+      type="error"
+      show-icon
+      :closable="false"
+    />
+    <el-empty
+      v-else-if="!pkg || !pkg.ready"
+      description="还没有可发布的视频，先在下方工作流生成视频"
+      :image-size="60"
+    />
+    <el-card v-else shadow="never" class="publish-pkg">
+      <div class="pub-row">
+        <video
+          v-if="pkg.videoUrl"
+          :src="mediaSrc(pkg.videoUrl)"
+          controls
+          style="max-width: 240px; border-radius: 8px"
+        />
+        <div class="pub-fields">
+          <div class="pub-field">
+            <label>标题</label>
+            <div class="pub-value">
+              <span class="pub-text">{{ pkg.title || "—" }}</span>
+              <el-button
+                v-if="pkg.title"
+                link
+                size="small"
+                type="primary"
+                @click="copyText(pkg.title)"
+              >复制</el-button>
+            </div>
+          </div>
+          <div class="pub-field">
+            <label>正文</label>
+            <div class="pub-value">
+              <span class="pub-text pub-desc">{{ pkg.desc || "—" }}</span>
+              <el-button
+                v-if="pkg.desc"
+                link
+                size="small"
+                type="primary"
+                @click="copyText(pkg.desc)"
+              >复制</el-button>
+            </div>
+          </div>
+          <div class="pub-field">
+            <label>标签</label>
+            <div class="pub-value">
+              <div class="pub-tags">
+                <el-tag v-for="t in pkg.tags" :key="t" size="small">{{ t }}</el-tag>
+                <span v-if="!pkg.tags.length" class="pub-text">—</span>
+              </div>
+              <el-button
+                v-if="pkg.tags.length"
+                link
+                size="small"
+                type="primary"
+                @click="copyText(pkg.tags.join('，'))"
+              >复制全部</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pub-status">
+        <el-tag v-if="pkg.autoPublishEnabled" type="success" size="small">已接自动发布</el-tag>
+        <el-tag v-else type="info" size="small">
+          未接自动发布——下载视频+复制文案，去平台网页版手动发
+        </el-tag>
+      </div>
+    </el-card>
+
     <WorkflowPanel :product-id="product.id" @changed="load(true)" />
 
     <el-dialog v-model="dialog" title="编辑商品" width="520px">
@@ -261,5 +367,43 @@ async function remove() {
   color: #94a3b8;
   font-size: 12px;
   margin: 4px 0 0;
+}
+.publish-pkg .pub-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.pub-fields {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pub-field label {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.pub-value {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pub-text {
+  flex: 1;
+}
+.pub-desc {
+  white-space: pre-wrap;
+}
+.pub-tags {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pub-status {
+  margin-top: 14px;
 }
 </style>

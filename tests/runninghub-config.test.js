@@ -6,9 +6,9 @@ import imageAdapter from "../lib/image-adapter.js";
 import { overrideVideoDefaults } from "../lib/video-adapter.js";
 import videoAdapter from "../lib/video-adapter.js";
 
-// 确保「公网URL原样返回」而非上传:默认即如此(RUNNINGHUB_UPLOAD_REMOTE_URL 未设为 "1")
+// 确保「公网URL原样返回」而非上传:非 "1" 即原样(不触发上传/不需要 KEY)
 beforeEach(() => {
-  delete process.env.RUNNINGHUB_UPLOAD_REMOTE_URL;
+  process.env.RUNNINGHUB_UPLOAD_REMOTE_URL = "";
 });
 
 const IMG_TPL = DEFAULT_GENERATION_TEMPLATES.find((t) => t.kind === "image");

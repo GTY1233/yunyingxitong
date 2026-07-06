@@ -52,6 +52,7 @@ model Account {
   auth     String?
   rule     String?
   persona  String?
+  publishHandle String? @map("publish_handle") // social-auto-upload 的 --account 账号名(留空则用 name)
   isDemo   Boolean @default(false) @map("is_demo")
 
   listingTasks ListingTask[]

@@ -23,4 +23,29 @@ export async function accountRoutes(app: FastifyInstance) {
       return { ok: true, data };
     }
   );
+
+  // 设置账号的「发布名」——对应 social-auto-upload 登录时用的 --account 名(用于定位已登录 cookie)。
+  app.patch<{ Params: { id: string }; Body: { publishHandle: string } }>(
+    "/api/v2/accounts/:id/publish-handle",
+    {
+      schema: {
+        tags: ["accounts"],
+        summary: "设置账号的 social-auto-upload 发布名",
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        body: {
+          type: "object",
+          required: ["publishHandle"],
+          properties: { publishHandle: { type: "string" } },
+        },
+      },
+    },
+    async (req) => {
+      const acc = await repos.accounts.getById(req.params.id);
+      if (!acc) return { ok: false, error: { code: "NOT_FOUND", message: "账号不存在" } };
+      const updated = await repos.accounts.update(req.params.id, {
+        publishHandle: req.body.publishHandle.trim() || null,
+      });
+      return { ok: true, data: updated };
+    }
+  );
 }

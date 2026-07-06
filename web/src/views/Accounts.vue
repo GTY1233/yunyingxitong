@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 import { type Account, api } from "../api";
 
@@ -6,7 +7,7 @@ const accounts = ref<Account[]>([]);
 const loading = ref(true);
 const error = ref("");
 
-onMounted(async () => {
+async function load() {
   try {
     accounts.value = await api.listAccounts();
   } catch (e) {
@@ -14,7 +15,8 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
-});
+}
+onMounted(load);
 
 const ROLE: Record<string, { label: string; type: string }> = {
   main_shop: { label: "主店", type: "danger" },
@@ -23,6 +25,32 @@ const ROLE: Record<string, { label: string; type: string }> = {
 };
 function role(r?: string) {
   return ROLE[r || ""] || { label: r || "—", type: "info" };
+}
+
+async function editHandle(row: Account) {
+  let val: string;
+  try {
+    const { value } = await ElMessageBox.prompt(
+      "social-auto-upload 登录该号时用的 --account 名",
+      `设置发布名：${row.name || row.id}`,
+      {
+        inputValue: row.publishHandle || "",
+        inputPlaceholder: "如 douyin_main_01",
+        confirmButtonText: "保存",
+        cancelButtonText: "取消",
+      },
+    );
+    val = (value || "").trim();
+  } catch {
+    return; // 取消
+  }
+  try {
+    await api.setAccountPublishHandle(row.id, val);
+    ElMessage.success("发布名已更新");
+    await load();
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+  }
 }
 </script>
 
@@ -41,6 +69,22 @@ function role(r?: string) {
     </el-table-column>
     <el-table-column prop="auth" label="授权" width="150" />
     <el-table-column prop="rule" label="发布规则" min-width="140" />
+    <el-table-column width="200">
+      <template #header>
+        发布名(自动发布)
+        <el-tooltip
+          content="social-auto-upload 登录该号时用的 --account 名；配好才能自动发布到此号"
+          placement="top"
+        >
+          <el-icon style="vertical-align: middle"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </template>
+      <template #default="{ row }">
+        <span v-if="row.publishHandle">{{ row.publishHandle }}</span>
+        <span v-else style="color: #94a3b8">—</span>
+        <el-button link size="small" type="primary" @click="editHandle(row)">编辑</el-button>
+      </template>
+    </el-table-column>
     <el-table-column label="演示号" width="80">
       <template #default="{ row }">
         <el-tag v-if="row.isDemo" size="small" type="info">演示</el-tag>

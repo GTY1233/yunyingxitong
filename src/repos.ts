@@ -17,6 +17,7 @@ interface Repos {
     getById(id: string): Promise<any>;
     byRole(role: string, platform?: string): Promise<any[]>;
     create(data: any): Promise<any>;
+    update(id: string, data: any): Promise<any>;
   };
   assets: {
     listByProduct(productId: string, kind?: string): Promise<any[]>;
