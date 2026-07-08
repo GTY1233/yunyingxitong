@@ -214,8 +214,14 @@ function primaryAction(status: string): Act | null {
 function canSkip(status: string) {
   return !["已成功", "已跳过", "未开始", "执行中"].includes(status);
 }
+// 已成功=重新生成;已跳过=补生成(之前跳过了想重新生成)。都走 rearm→execute。
 function canRegen(node: { status: string; kind?: string }) {
-  return node.status === "已成功" && !!node.kind && GEN_KINDS.includes(node.kind);
+  return (
+    ["已成功", "已跳过"].includes(node.status) && !!node.kind && GEN_KINDS.includes(node.kind)
+  );
+}
+function regenLabel(status: string) {
+  return status === "已跳过" ? "生成" : "重新生成";
 }
 function wfTagType(status?: string) {
   if (status === "已完成") return "success";
@@ -284,8 +290,9 @@ const dlgTitle = () =>
               <el-button
                 v-if="canRegen(node)"
                 size="small"
+                :type="node.status === '已跳过' ? 'primary' : ''"
                 @click="runAction(wf.id, node.id, 'execute', node.kind, true)"
-              >重新生成</el-button>
+              >{{ regenLabel(node.status) }}</el-button>
               <el-button
                 v-if="canSkip(node.status)"
                 size="small"

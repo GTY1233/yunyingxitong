@@ -112,3 +112,23 @@ describe("applyAction 状态流转", () => {
     expect(computeWorkflowStatus(nodes)).toBe("已完成");
   });
 });
+
+describe("rearm(重新生成)含已跳过", () => {
+  it("已跳过的生成节点可 rearm 回可执行(补生成)", () => {
+    const nodes = initializeNodes(withIds(buildNodeRows("抖音")));
+    const imgNode = nodes.find((n) => n.nodeKey === "generate_image");
+    // 跳过图片生成节点
+    let after = applyAction(nodes, { type: "skip", nodeId: imgNode.id });
+    expect(after.find((n) => n.id === imgNode.id).status).toBe("已跳过");
+    // rearm → 可执行(之前跳过了想补生成)
+    after = applyAction(after, { type: "rearm", nodeId: imgNode.id });
+    expect(after.find((n) => n.id === imgNode.id).status).toBe("可执行");
+  });
+
+  it("人工/观测类节点跳过后不可 rearm(仅生成/上架/发布可重生成)", () => {
+    const nodes = initializeNodes(withIds(buildNodeRows("抖音")));
+    const manualNode = nodes.find((n) => n.type === "manual" && n.nodeKey !== "product_info");
+    const after = applyAction(nodes, { type: "skip", nodeId: manualNode.id });
+    expect(() => applyAction(after, { type: "rearm", nodeId: manualNode.id })).toThrow();
+  });
+});
