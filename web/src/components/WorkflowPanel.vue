@@ -104,14 +104,30 @@ const versionCount = ref(3);
 // 视频
 const refVideos = ref<ReferenceVideo[]>([]);
 const selectedRefVideo = ref("");
-// 新视频工作流(app 1975951975441412098)可调项:帧率/秒数(→加载帧上限)/表情强度/胸部抖动幅度。
-// 旧的 宽/高(像素)、模式 已废弃(新工作流走分辨率预设+比例),不再传。
-const vp = reactive({
-  frameRate: 30,
-  seconds: 7,
-  expressionIntensity: 0.6,
-  ruKilnAmplitude: 0.27,
-});
+// 新视频工作流全部可调项(16 项,都可选,不传用工作流默认)。
+// 通过节点动作端点 body 随 execute 传出:api.workflowAction(wfId, nodeId, "execute", { referenceVideoId, ...vp })。
+const VP_DEFAULTS = {
+  zipMode: "1", // 输出方式:1=正常输出(cn站)、2=ZIP(cn站不支持)
+  poseCalcMode: "2", // 姿势计算方式:1=姿势1(快)、2=姿势2 sdpose(慢·更准)
+  poseLongNeck: false, // 姿势3·脖子长时开启
+  poseStrength: 1.0, // 姿势强度
+  cameraMove: false, // 运镜开关
+  cameraStrength: 1.0, // 运镜强度
+  maskHelmet: false, // 面具头盔模式
+  expressionIntensity: 0.6, // 表情强度
+  ruKilnAmplitude: 0.27, // 胸部抖动幅度
+  skipFrames: 0, // 跳过前面多少帧
+  maxFrames: 840, // 加载帧上限(时长≈帧数÷帧率)
+  frameRate: 30, // 帧率
+  resolution: "2", // 分辨率:1=720P、2=1080P(推荐)
+  customRatio: false, // 开启自定义比例
+  ratioW: 9, // 自定义比例·宽
+  ratioH: 16, // 自定义比例·高
+} as const;
+const vp = reactive({ ...VP_DEFAULTS });
+function resetVp() {
+  Object.assign(vp, VP_DEFAULTS);
+}
 
 const GEN_KINDS = ["image", "copy", "video"];
 
@@ -132,6 +148,7 @@ async function runAction(wfId: string, nodeId: string, action: string, kind?: st
       versionCount.value = 3;
     } else if (kind === "video") {
       selectedRefVideo.value = "";
+      resetVp();
       refVideos.value = await api.listReferenceVideos().catch(() => []);
     }
     dlg.value = true;
@@ -356,12 +373,45 @@ const dlgTitle = () =>
           </div>
         </div>
         <p class="tip">参考图自动用「最新生成的换装图」(node299)。以下参数一般用默认,可微调:</p>
+        <div class="field-label">基础</div>
         <div class="vp-grid">
           <label>帧率 <el-input-number v-model="vp.frameRate" :min="1" size="small" controls-position="right" /></label>
-          <label>秒数 <el-input-number v-model="vp.seconds" :min="1" size="small" controls-position="right" /></label>
+          <label>加载帧上限 <el-input-number v-model="vp.maxFrames" :min="1" size="small" controls-position="right" /></label>
+          <label>分辨率
+            <el-select v-model="vp.resolution" size="small" style="width: 130px">
+              <el-option label="720P" value="1" />
+              <el-option label="1080P(推荐)" value="2" />
+            </el-select>
+          </label>
           <label>表情强度 <el-input-number v-model="vp.expressionIntensity" :min="0" :max="1" :step="0.05" size="small" controls-position="right" /></label>
           <label>胸部抖动幅度 <el-input-number v-model="vp.ruKilnAmplitude" :min="0" :max="1" :step="0.01" size="small" controls-position="right" /></label>
         </div>
+        <p class="tip">时长 ≈ 加载帧上限 ÷ 帧率(如 840÷30 ≈ 28 秒)。</p>
+        <div class="field-label">进阶(一般默认)</div>
+        <div class="vp-grid">
+          <label>姿势计算方式
+            <el-select v-model="vp.poseCalcMode" size="small" style="width: 180px">
+              <el-option label="姿势1(快)" value="1" />
+              <el-option label="姿势2 sdpose(慢·更准)" value="2" />
+            </el-select>
+          </label>
+          <label>姿势3·脖子长时开启 <el-switch v-model="vp.poseLongNeck" /></label>
+          <label>姿势强度 <el-input-number v-model="vp.poseStrength" :step="0.1" size="small" controls-position="right" /></label>
+          <label>运镜开关 <el-switch v-model="vp.cameraMove" /></label>
+          <label>运镜强度 <el-input-number v-model="vp.cameraStrength" :step="0.1" size="small" controls-position="right" /></label>
+          <label>面具头盔模式 <el-switch v-model="vp.maskHelmet" /></label>
+          <label>跳过前面多少帧 <el-input-number v-model="vp.skipFrames" :min="0" size="small" controls-position="right" /></label>
+          <label>输出方式
+            <el-select v-model="vp.zipMode" size="small" style="width: 180px">
+              <el-option label="正常输出(cn站)" value="1" />
+              <el-option label="ZIP(cn站不支持)" value="2" />
+            </el-select>
+          </label>
+          <label>开启自定义比例 <el-switch v-model="vp.customRatio" /></label>
+          <label>自定义比例·宽 <el-input-number v-model="vp.ratioW" :min="1" size="small" controls-position="right" /></label>
+          <label>自定义比例·高 <el-input-number v-model="vp.ratioH" :min="1" size="small" controls-position="right" /></label>
+        </div>
+        <p class="tip">cn站不支持ZIP,一般用正常输出。</p>
       </template>
 
       <template #footer>

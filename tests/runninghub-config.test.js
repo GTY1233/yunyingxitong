@@ -110,37 +110,51 @@ describe("视频工作流:app 与节点映射", () => {
     expect(n["161"]).toBeUndefined();
   });
 
-  it("参数覆盖:帧率→264、表情→265、胸部抖动→266、秒数→加载帧上限422(=秒×帧率)", () => {
+  it("全量参数覆盖:数值/档位/开关(bool→true/false)各映射到对应节点", () => {
     const defaults = [
-      { nodeId: "264", fieldName: "value", fieldValue: "30" },
-      { nodeId: "265", fieldName: "value", fieldValue: "0.8" },
-      { nodeId: "266", fieldName: "value", fieldValue: "0.2" },
-      { nodeId: "422", fieldName: "value", fieldValue: "840" },
+      { nodeId: "264", fieldValue: "30" }, // 帧率
+      { nodeId: "265", fieldValue: "0.6" }, // 表情
+      { nodeId: "266", fieldValue: "0.27" }, // 胸部抖动
+      { nodeId: "297", fieldValue: "1.0" }, // 姿势强度
+      { nodeId: "370", fieldValue: "false" }, // 运镜开关
+      { nodeId: "422", fieldValue: "840" }, // 加载帧上限
+      { nodeId: "470", fieldValue: "2" }, // 分辨率
+      { nodeId: "452", fieldValue: "false" }, // 自定义比例
     ];
     const out = byNode(
       overrideVideoDefaults(defaults, {
-        frameRate: "30",
-        expressionIntensity: "0.9",
-        ruKilnAmplitude: "0.35",
-        seconds: "7",
+        frameRate: 30,
+        expressionIntensity: 0.9,
+        ruKilnAmplitude: 0.35,
+        poseStrength: 1.5,
+        cameraMove: true, // 开关 → "true"
+        maxFrames: 300, // 加载帧上限直接设
+        resolution: "1", // 分辨率档位
+        customRatio: false, // 开关 → "false"
       })
     );
     expect(out["264"].fieldValue).toBe("30");
     expect(out["265"].fieldValue).toBe("0.9");
     expect(out["266"].fieldValue).toBe("0.35");
-    expect(out["422"].fieldValue).toBe("210"); // 7 × 30
+    expect(out["297"].fieldValue).toBe("1.5");
+    expect(out["370"].fieldValue).toBe("true"); // bool 转字符串
+    expect(out["422"].fieldValue).toBe("300");
+    expect(out["470"].fieldValue).toBe("1");
+    expect(out["452"].fieldValue).toBe("false");
   });
 
   it("未传参数时保留工作流默认值(不被空串覆盖)", () => {
-    const defaults = [{ nodeId: "264", fieldName: "value", fieldValue: "30" }];
+    const defaults = [{ nodeId: "264", fieldValue: "30" }];
     const out = byNode(overrideVideoDefaults(defaults, {}));
     expect(out["264"].fieldValue).toBe("30");
   });
 
-  it("视频模板默认已去掉像素宽高/mode(避免污染新工作流的比例节点)", () => {
+  it("视频调参默认全部在 nodeInfoDefaults(模板 defaults 只留展示字段)", () => {
+    const nodeIds = VID_TPL.runningHub.nodeInfoDefaults.map((n) => n.nodeId);
+    expect(nodeIds).toEqual(
+      expect.arrayContaining(["264", "265", "266", "297", "370", "422", "470", "452"])
+    );
+    expect(VID_TPL.defaults.frameRate).toBeUndefined(); // 已移出模板
     expect(VID_TPL.defaults.videoWidth).toBeUndefined();
-    expect(VID_TPL.defaults.videoHeight).toBeUndefined();
-    expect(VID_TPL.defaults.mode).toBeUndefined();
-    expect(VID_TPL.defaults.frameRate).toBe("30");
   });
 });

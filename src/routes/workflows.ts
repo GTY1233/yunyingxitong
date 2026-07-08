@@ -175,13 +175,23 @@ export async function workflowRoutes(app: FastifyInstance) {
             waistHipMode: { type: "string" },
             outputMode: { type: "string" },
             referenceVideoId: { type: "string" },
-            frameRate: { type: "integer" },
-            seconds: { type: "integer" },
-            videoWidth: { type: "integer" },
-            videoHeight: { type: "integer" },
-            mode: { type: "integer" },
-            expressionIntensity: { type: "number" },
-            ruKilnAmplitude: { type: "number" },
+            // 视频工作流全部可调项(见 video-adapter.overrideVideoDefaults)
+            zipMode: { type: "string" }, // 535 输出方式(cn站用1正常输出)
+            poseCalcMode: { type: "string" }, // 293 姿势计算(2=sdpose更准)
+            poseLongNeck: { type: "boolean" }, // 497 姿势3若脖子长开启
+            poseStrength: { type: "number" }, // 297 姿势强度
+            cameraMove: { type: "boolean" }, // 370 运镜开关
+            cameraStrength: { type: "number" }, // 361 运镜强度
+            maskHelmet: { type: "boolean" }, // 271 面具头盔模式
+            expressionIntensity: { type: "number" }, // 265 表情强度
+            ruKilnAmplitude: { type: "number" }, // 266 胸部抖动幅度
+            skipFrames: { type: "integer" }, // 499 跳过前面多少帧
+            maxFrames: { type: "integer" }, // 422 加载帧上限(决定时长)
+            frameRate: { type: "integer" }, // 264 帧率
+            resolution: { type: "string" }, // 470 分辨率(1=720P/2=1080P)
+            customRatio: { type: "boolean" }, // 452 开启自定义比例
+            ratioW: { type: "integer" }, // 451 自定义比例宽
+            ratioH: { type: "integer" }, // 450 自定义比例高
           },
         },
       },
