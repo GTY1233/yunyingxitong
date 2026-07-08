@@ -16,7 +16,7 @@ function withIds(rows) {
 describe("chains", () => {
   it("三平台链长度正确", () => {
     const t = listTemplates();
-    expect(t.find((x) => x.platform === "抖音").stepCount).toBe(12);
+    expect(t.find((x) => x.platform === "抖音").stepCount).toBe(11); // 合并了「主店上架确认」
     expect(t.find((x) => x.platform === "小红书").stepCount).toBe(9);
     expect(t.find((x) => x.platform === "淘宝").stepCount).toBe(6);
   });

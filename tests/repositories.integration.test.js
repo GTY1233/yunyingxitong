@@ -255,18 +255,14 @@ describe("自动流水线(autoMode,对临时库)", () => {
     let wf = await engine.createForProduct(p.id, "淘宝", { autoMode: true, sync: true });
     expect(wf.autoMode).toBe(true);
     // 两个生成节点已被自动执行,链停在「预览确认」审核点
-    let waiting = wf.nodes.find((n) => n.status === "待确认");
+    const waiting = wf.nodes.find((n) => n.status === "待确认");
     expect(waiting?.label).toBe("预览确认");
     expect(wf.nodes.filter((n) => n.status === "已成功").length).toBe(3);
 
-    // 人通过审核点 → 自动执行上架 → 停在「数据回流」观测点
+    // 人通过审核点 → 自动执行上架 →「数据回流」(可选)自动跳过 → 全链完成
     wf = await engine.act(wf.id, waiting.id, "confirm", { sync: true });
     expect(wf.nodes.find((n) => n.label === "店铺上架").status).toBe("已成功");
-    waiting = wf.nodes.find((n) => n.status === "待确认");
-    expect(waiting?.label).toBe("数据回流");
-
-    // 最后一个观测点确认 → 全链完成
-    wf = await engine.act(wf.id, waiting.id, "confirm", { sync: true });
+    expect(wf.nodes.find((n) => n.label === "数据回流").status).toBe("已跳过");
     expect(wf.status).toBe("已完成");
     expect(wf.progress).toBe(100);
   });
