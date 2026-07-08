@@ -106,6 +106,9 @@ export interface WorkflowNode {
   kind?: string;
   status: string;
   error?: string;
+  updatedAt?: string;
+  runStage?: string;
+  optional?: boolean;
 }
 
 export interface Workflow {

@@ -21,12 +21,34 @@ const PLATFORMS = ["抖音", "小红书", "淘宝"];
 const autoOn = reactive<Record<string, boolean>>({});
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
+// 「已进行 mm:ss」计时器用的当前时间(每秒刷新),仅在有执行中节点时才跑,避免空转
+const now = ref(Date.now());
+let tickTimer: ReturnType<typeof setInterval> | undefined;
 
 // 有节点执行中,或自动模式链路仍在执行中(节点间切换瞬间没有执行中节点,不能停表)
 function shouldPoll() {
   return workflows.value.some(
     (w) => w.nodes.some((n) => n.status === "执行中") || (w.autoMode && w.status === "执行中")
   );
+}
+
+// 是否存在「执行中」节点(计时器只在此时跑,和 4 秒轮询各自独立)
+function hasRunningNode() {
+  return workflows.value.some((w) => w.nodes.some((n) => n.status === "执行中"));
+}
+
+// 从 updatedAt 到现在的秒数,格式化成 mm:ss(超过 60 分钟就 h:mm:ss)
+function fmtElapsed(sec: number) {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
+}
+function elapsedSec(node: { updatedAt?: string }) {
+  if (!node.updatedAt) return 0;
+  return Math.max(0, Math.floor((now.value - Date.parse(node.updatedAt)) / 1000));
 }
 
 async function load(silent = false) {
@@ -50,6 +72,16 @@ async function load(silent = false) {
     clearInterval(pollTimer);
     pollTimer = undefined;
   }
+  // 1 秒 ticker:只在有「执行中」节点时跑,用来推进「已进行 mm:ss」
+  if (hasRunningNode() && !tickTimer) {
+    now.value = Date.now();
+    tickTimer = setInterval(() => {
+      now.value = Date.now();
+    }, 1000);
+  } else if (!hasRunningNode() && tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = undefined;
+  }
 }
 
 async function onAutoChange(wf: Workflow, val: string | number | boolean) {
@@ -66,6 +98,7 @@ async function onAutoChange(wf: Workflow, val: string | number | boolean) {
 onMounted(() => load());
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer);
+  if (tickTimer) clearInterval(tickTimer);
 });
 
 async function create() {
@@ -229,6 +262,10 @@ function wfTagType(status?: string) {
   if (status === "等待确认") return "warning";
   return "info";
 }
+// runStage 子状态的 tag 类型:排队中→灰(info)、生成中→绿(success/processing)
+function runStageTagType(stage?: string) {
+  return stage === "排队中" ? "info" : "success";
+}
 
 const dlgTitle = () =>
   dlgKind.value === "image" ? "换装生图参数" : dlgKind.value === "copy" ? "文案生成参数" : "视频生成参数";
@@ -272,10 +309,23 @@ const dlgTitle = () =>
             <span class="dot" :style="{ background: color(node.status) }" />
             <span class="node-label">{{ node.label }}</span>
             <el-tag
+              v-if="node.optional"
+              size="small"
+              type="info"
+              effect="plain"
+              title="自动模式会自动跳过,需要时手动确认"
+            >可选</el-tag>
+            <el-tag
               size="small"
               effect="plain"
               :style="{ color: color(node.status), borderColor: color(node.status) }"
             >{{ node.status }}</el-tag>
+            <template v-if="node.status === '执行中'">
+              <el-tag size="small" :type="runStageTagType(node.runStage)" effect="plain">
+                {{ node.runStage || '生成中' }}
+              </el-tag>
+              <span v-if="node.updatedAt" class="tip">已进行 {{ fmtElapsed(elapsedSec(node)) }}</span>
+            </template>
             <span v-if="node.error" class="node-err">{{ node.error }}</span>
             <span v-if="node.status === '执行中'" class="node-running">
               <el-icon class="is-loading"><Loading /></el-icon>生成中…
