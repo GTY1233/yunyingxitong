@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
-import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { type ModelImage, type ReferenceVideo, type Workflow, api } from "../api";
 
 const props = defineProps<{ productId: string }>();
@@ -137,6 +137,16 @@ const versionCount = ref(3);
 // 视频
 const refVideos = ref<ReferenceVideo[]>([]);
 const selectedRefVideo = ref("");
+
+// 选中项的完整预览 URL(用于弹窗里的大图/可播放预览,不裁切)
+const selectedModelUrl = computed(() => {
+  const m = models.value.find((x) => x.id === selectedModel.value);
+  return m ? mediaSrc(m.mediaUrl) : "";
+});
+const selectedRefVideoUrl = computed(() => {
+  const r = refVideos.value.find((x) => x.id === selectedRefVideo.value);
+  return r ? mediaSrc(r.mediaUrl) : "";
+});
 // 新视频工作流全部可调项(16 项,都可选,不传用工作流默认)。
 // 通过节点动作端点 body 随 execute 传出:api.workflowAction(wfId, nodeId, "execute", { referenceVideoId, ...vp })。
 const VP_DEFAULTS = {
@@ -371,6 +381,16 @@ const dlgTitle = () =>
             <el-image :src="mediaSrc(m.mediaUrl)" fit="cover" style="width: 110px; height: 110px" />
           </div>
         </div>
+        <div v-if="selectedModelUrl" class="media-preview">
+          <el-image
+            :src="selectedModelUrl"
+            fit="contain"
+            :preview-src-list="[selectedModelUrl]"
+            :preview-teleported="true"
+            style="max-width: 100%; max-height: 320px"
+          />
+          <p class="tip">👆 已选模特图 · 点击可放大看原图</p>
+        </div>
         <div class="field-label">换装提示词(node68,默认已填,可改)</div>
         <el-input v-model="imgPrompt" type="textarea" :rows="3" />
         <div class="vp-grid" style="margin-top: 12px">
@@ -428,6 +448,16 @@ const dlgTitle = () =>
             <video :src="mediaSrc(r.mediaUrl)" muted style="width: 130px; height: 110px; object-fit: cover" />
             <div class="rv-name">{{ r.name }}</div>
           </div>
+        </div>
+        <div v-if="selectedRefVideoUrl" class="media-preview">
+          <video
+            :src="selectedRefVideoUrl"
+            controls
+            muted
+            playsinline
+            style="max-width: 100%; max-height: 320px; background: #000; border-radius: 6px"
+          />
+          <p class="tip">👆 已选参考视频 · 可播放预览</p>
         </div>
         <p class="tip">参考图自动用「最新生成的换装图」(node299)。以下参数一般用默认,可微调:</p>
         <div class="field-label">基础</div>
@@ -566,6 +596,17 @@ const dlgTitle = () =>
 }
 .media-cell.sel {
   border-color: #2563eb;
+}
+.media-preview {
+  margin: 10px 0;
+  text-align: center;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.media-preview .tip {
+  margin: 6px 0 0;
 }
 .rv-name {
   font-size: 11px;
